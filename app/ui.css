@@ -1,0 +1,604 @@
+/* 畑めぐり（rinsaku-planner）— 製品固有のコンポーネント CSS。
+ * globals.css の構造クラス（.btn/.card/.hero…）は書き換えず、既存トークンのみ使用する。
+ * 個性は theme.css のトークンで出す。ここは「区画グリッド」「連作ステート」「タイムライン」
+ * 「応援セクション」など本製品にしかない部品の最小スタイル。 */
+
+/* ===== アプリのレイアウト ===== */
+.app-main {
+  padding-block: var(--sp-8) var(--sp-16);
+}
+.app-section + .app-section {
+  margin-top: var(--sp-12);
+}
+.section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+}
+.section-head h2 {
+  margin-top: 0;
+}
+.muted {
+  /* 指示・補助の文章。AA に余裕を持たせるため dim ではなく soft を使う
+   * （--text-dim は surface-2 上 4.40:1 で機能テキストには不足）。 */
+  color: var(--text-soft);
+  font-size: var(--fs-sm);
+}
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  align-items: center;
+}
+.grow {
+  flex: 1 1 auto;
+}
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ===== フォーム（select プルダウン） ===== */
+/* ネイティブ select はホバー時の border-color トランジション中に内部テキストが微小に震える
+ * （macOS）。appearance:none で CSS 描画に統一し（テキスト入力と同じ挙動＝安定）、右端に
+ * 自前の矢印を置く。ドロップダウンのリスト自体はネイティブのまま。 */
+select {
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8' fill='none' stroke='%23737563' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M1 1.5 6 6.5 11 1.5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right var(--sp-4) center;
+  background-size: 12px 8px;
+  padding-right: calc(var(--sp-8) + 6px);
+}
+/* focus 時、globals の `background: var(--bg)` ショートハンドが image だけでなく
+ * repeat/position/size も初期値（repeat・左上・auto）へ戻すため、矢印がタイル表示になる。
+ * focus 時にも「単体・右寄せ・原寸」を全て再指定して打ち消す。 */
+select:focus {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8' fill='none' stroke='%23737563' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M1 1.5 6 6.5 11 1.5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right var(--sp-4) center;
+  background-size: 12px 8px;
+}
+@media (prefers-color-scheme: dark) {
+  select,
+  select:focus {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8' fill='none' stroke='%23A8AA94' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M1 1.5 6 6.5 11 1.5'/%3E%3C/svg%3E");
+  }
+}
+
+/* ===== 区画グリッド ===== */
+.bed-grid {
+  display: grid;
+  grid-template-columns: repeat(var(--cols, 4), minmax(76px, 1fr));
+  gap: var(--sp-2);
+  padding: var(--sp-3);
+  /* 耕した土の枠：温かいニュートラルに、ごく薄い畝の筋（縦縞）を重ねる（装飾）。 */
+  background:
+    repeating-linear-gradient(
+      90deg,
+      hsl(var(--neutral-hue) 16% 90% / 0.45) 0 1px,
+      transparent 1px 22px
+    ),
+    var(--surface-sunken);
+  border: 1px solid var(--soil-line);
+  border-radius: var(--radius);
+  /* レイズドベッドの内縁 */
+  box-shadow:
+    inset 0 1px 0 hsl(var(--neutral-hue) 30% 100% / 0.6),
+    inset 0 0 0 1px hsl(var(--neutral-hue) 20% 88% / 0.4);
+  overflow-x: auto;
+}
+@media (prefers-color-scheme: dark) {
+  .bed-grid {
+    background:
+      repeating-linear-gradient(
+        90deg,
+        hsl(var(--neutral-hue) 18% 18% / 0.5) 0 1px,
+        transparent 1px 22px
+      ),
+      var(--surface-sunken);
+    box-shadow: inset 0 0 0 1px hsl(var(--neutral-hue) 16% 22% / 0.6);
+  }
+}
+.bed-cell {
+  position: relative;
+  min-height: 94px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  padding: var(--sp-2);
+  border: 1.5px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  /* 区画＝盛り土の床：上を明るく・下をわずかに沈ませた縦グラデで立体感。 */
+  background: linear-gradient(
+    180deg,
+    var(--surface) 0%,
+    hsl(var(--neutral-hue) 22% 96%) 100%
+  );
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  color: var(--text);
+  transition:
+    border-color var(--transition),
+    box-shadow var(--transition),
+    transform var(--transition);
+}
+@media (prefers-color-scheme: dark) {
+  .bed-cell {
+    background: linear-gradient(
+      180deg,
+      var(--surface) 0%,
+      hsl(var(--neutral-hue) 20% 9%) 100%
+    );
+  }
+}
+.bed-cell:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+.bed-cell[aria-current="true"] {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-ring);
+}
+/* 空き区画＝まだ耕していない地面。 */
+.bed-cell.is-add {
+  border-style: dashed;
+  border-color: var(--soil-line);
+  background: var(--surface-sunken);
+  color: var(--text-dim);
+  justify-content: center;
+  align-items: center;
+  font-weight: var(--fw-semibold);
+}
+.bed-cell.is-add:hover {
+  color: var(--accent);
+  background: var(--accent-tint);
+  border-color: var(--accent);
+}
+.bed-cell.state-ng {
+  border-color: var(--err);
+  border-style: solid;
+}
+.bed-cell.state-caution {
+  border-color: var(--warn);
+  border-style: dashed;
+}
+/* 科の手がかり：右上の小さな丸ドット（色だけに依存させない＝科名は常にテキスト併記・装飾）。 */
+.bed-cell-fam {
+  position: absolute;
+  top: var(--sp-2);
+  right: var(--sp-2);
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: hsl(var(--fam, 125) var(--fam-s) var(--fam-l));
+  box-shadow:
+    0 0 0 1.5px var(--surface),
+    0 0 0 2.5px hsl(var(--neutral-hue) 16% 70% / 0.6);
+}
+/* 作物が植わっている区画の芽グリフ（科色で tint・装飾）。 */
+.bed-cell-seedling {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  color: hsl(var(--fam, 125) var(--fam-s) var(--fam-l));
+}
+.bed-cell-label {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  line-height: 1.25;
+  word-break: break-word;
+  padding-right: 22px; /* fam ドット(10px)+影(2.5px)+右オフセット(8px) と重ならない余白 */
+}
+.bed-cell-kind {
+  font-size: var(--fs-xs);
+  color: var(--text-dim);
+}
+.bed-cell-crop {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  font-size: var(--fs-xs);
+  color: var(--text-soft);
+  margin-top: auto;
+}
+/* 選択中の区画を色以外でも示す（編集中チップ）。 */
+.bed-cell-editing {
+  align-self: flex-start;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-bold);
+  color: var(--accent);
+}
+
+/* ===== 連作ステートバッジ（色＋形＋文字の三重符号化） ===== */
+.bed-state {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-bold);
+  line-height: 1.2;
+}
+.bed-state svg {
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+.bed-state.is-ng {
+  color: var(--err);
+}
+.bed-state.is-caution {
+  color: var(--warn);
+}
+/* OK は文字を --text（AA 確保）、アイコン線のみ --ok（UI graphics ≥3:1） */
+.bed-state.is-ok {
+  color: var(--text-soft);
+}
+.bed-state.is-ok svg {
+  color: var(--ok);
+}
+.bed-state.is-empty {
+  color: var(--text-dim);
+}
+
+/* ===== 編集パネル ===== */
+.bed-editor {
+  margin-top: var(--sp-4);
+}
+.bed-editor .field + .field {
+  margin-top: var(--sp-4);
+}
+.planting-list {
+  list-style: none;
+  padding: 0;
+  margin: var(--sp-3) 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+.planting-item {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  background: var(--surface-2);
+  border-radius: var(--radius-sm);
+  font-size: var(--fs-sm);
+}
+.planting-item .grow {
+  min-width: 0;
+}
+.row-2 {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: var(--sp-2);
+  align-items: end;
+}
+
+/* ===== 連作判定の説明バナー ===== */
+.verdict {
+  display: flex;
+  gap: var(--sp-2);
+  align-items: flex-start;
+  padding: var(--sp-3);
+  border-radius: var(--radius-sm);
+  font-size: var(--fs-sm);
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+.verdict svg {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  margin-top: 1px;
+}
+.verdict.is-ng {
+  background: var(--err-tint);
+  border-color: transparent;
+  color: var(--err);
+}
+.verdict.is-caution {
+  background: var(--warn-tint);
+  border-color: transparent;
+  color: var(--warn);
+}
+.verdict.is-ok {
+  background: var(--ok-tint);
+  border-color: transparent;
+  color: var(--ok);
+}
+
+/* ===== 12 か月タイムライン ===== */
+.timeline {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.timeline-inner {
+  min-width: 32rem;
+}
+.timeline-row {
+  display: grid;
+  grid-template-columns: 6.5rem repeat(12, minmax(26px, 1fr));
+  align-items: center;
+  border-bottom: 1px solid var(--border);
+}
+.timeline-row:last-child {
+  border-bottom: none;
+}
+.timeline-row.is-head {
+  /* ヘッダ行を土帯色にして「畑の台帳」感（テキストは text-soft で AA: soil-tint 上 6.81/8.5）。 */
+  background: var(--soil-tint);
+  font-size: var(--fs-xs);
+  color: var(--text-soft);
+  font-weight: var(--fw-bold);
+}
+.timeline-crop {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--surface);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  padding: var(--sp-2) var(--sp-3);
+  border-right: 1px solid var(--border);
+}
+.timeline-row.is-head .timeline-crop {
+  background: var(--soil-tint);
+}
+.timeline-month {
+  text-align: center;
+  padding: var(--sp-1) 0;
+}
+.timeline-cell {
+  min-height: 34px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: center;
+  gap: 2px;
+  padding: 3px 2px;
+}
+.tl-bar {
+  width: 100%;
+  height: 11px;
+  border-radius: var(--radius-pill);
+}
+.tl-bar.sow {
+  background: var(--accent);
+  /* 種をまいた畝の継ぎ目を 1px のハイライトで（装飾）。 */
+  box-shadow: inset 0 1px 0 hsl(var(--accent-h) var(--accent-s) 70% / 0.5);
+}
+.tl-bar.harvest {
+  background: repeating-linear-gradient(
+    45deg,
+    var(--ok) 0 4px,
+    transparent 4px 8px
+  );
+  outline: 1px solid var(--ok);
+  outline-offset: -1px;
+}
+.tl-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-4);
+  margin-top: var(--sp-3);
+  font-size: var(--fs-sm);
+  color: var(--text-soft);
+}
+.tl-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.tl-swatch {
+  width: 22px;
+  height: 12px;
+  border-radius: var(--radius-pill);
+  flex: none;
+}
+.tl-swatch.sow {
+  background: var(--accent);
+}
+.tl-swatch.harvest {
+  background: repeating-linear-gradient(
+    45deg,
+    var(--ok) 0 4px,
+    transparent 4px 8px
+  );
+  outline: 1px solid var(--ok);
+  outline-offset: -1px;
+}
+
+/* ===== 応援（honor）セクション ===== */
+.support {
+  margin-top: var(--sp-8);
+  padding: var(--sp-8);
+  border: 1px solid var(--soil-line);
+  border-radius: var(--radius-lg);
+  /* 上端に温かい土帯を敷いたカード（テキストは --text/--text-soft のまま）。 */
+  background:
+    linear-gradient(180deg, var(--soil-tint) 0%, var(--surface) 64px),
+    var(--surface);
+}
+.support-grid {
+  display: grid;
+  gap: var(--sp-4);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
+  margin-top: var(--sp-6);
+}
+.support-card h3 {
+  margin-top: 0;
+  font-size: var(--fs-md);
+}
+.support-card p {
+  font-size: var(--fs-sm);
+  color: var(--text-soft);
+}
+
+/* ===== コンパニオン提案 ===== */
+.companion-grid {
+  display: grid;
+  gap: var(--sp-4);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
+}
+.companion-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1);
+  margin-top: var(--sp-2);
+}
+
+/* ===== ガーデン切り替えタブ ===== */
+.garden-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  align-items: center;
+}
+
+/* ===== ヒーローの土イラスト（製品固有・純装飾） ===== */
+/* globals の汎用グリッドテクスチャは本製品では表示しない（base クラスは書き換えず表示のみ無効化）。 */
+.hero::after {
+  display: none;
+}
+.hero-scene {
+  position: absolute;
+  inset: 0;
+  z-index: -1; /* ::before(accent glow, -2) の上、本文の下 */
+  overflow: hidden;
+  pointer-events: none;
+}
+.hero-scene svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+/* SVG の塗りはトークンで（presentation 属性の var() は解決されないため class で当てる）。
+ * これで light/dark に自動追従する。 */
+.hero-soil {
+  fill: var(--soil-tint);
+}
+.hero-furrow {
+  fill: var(--soil-line);
+}
+.hero-sprouts {
+  stroke: var(--accent);
+}
+.hero-leaf {
+  fill: var(--accent);
+  stroke: none;
+}
+.hero .container {
+  position: relative;
+  z-index: 1; /* 本文を確実に前面へ */
+}
+@media (prefers-reduced-motion: no-preference) {
+  .hero-sprout {
+    animation: hero-sway 7s var(--ease) infinite alternate;
+    /* SVG <g> の transform-origin を要素の bbox 基準にする（Safari 等で
+     * 既定の SVG ビューポート基準だと回転軸がずれるため）。 */
+    transform-box: fill-box;
+    transform-origin: bottom center;
+  }
+}
+@keyframes hero-sway {
+  from {
+    transform: rotate(-1.2deg);
+  }
+  to {
+    transform: rotate(1.2deg);
+  }
+}
+
+/* ===== セクション見出しのスプラウト印（装飾・テラコッタ tint の小円に芽） ===== */
+.section-marker {
+  display: inline-grid;
+  place-items: center;
+  width: 1.6rem;
+  height: 1.6rem;
+  flex: none;
+  margin-right: var(--sp-2);
+  border-radius: 50%;
+  background: var(--soil-tint);
+  color: var(--soil);
+  vertical-align: -0.3em;
+}
+.section-marker svg {
+  width: 1rem;
+  height: 1rem;
+}
+.with-marker {
+  display: inline-flex;
+  align-items: center;
+}
+
+/* ===== 土の継ぎ目ディバイダ ===== */
+.soil-divider {
+  height: 12px;
+  border: none;
+  margin: 0;
+  background: radial-gradient(
+      8px 6px at 12px 0,
+      var(--soil-line) 49%,
+      transparent 51%
+    )
+    repeat-x;
+  background-size: 24px 12px;
+  opacity: 0.7;
+}
+
+/* ===== footer：葉マーク ===== */
+.site-footer .footer-leaf {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  color: var(--soil);
+  font-weight: var(--fw-semibold);
+}
+.site-footer .footer-leaf svg {
+  width: 1.1rem;
+  height: 1.1rem;
+}
+
+/* ===== レスポンシブ ===== */
+@media (max-width: 640px) {
+  .row-2 {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ===== 印刷（応援機能：作付け計画の印刷/PDF） ===== */
+@media print {
+  .site-header,
+  .hero,
+  .no-print,
+  .support,
+  .skip-link,
+  .site-footer {
+    display: none !important;
+  }
+  .app-main {
+    padding: 0;
+  }
+  .bed-grid,
+  .timeline {
+    overflow: visible;
+    break-inside: avoid;
+  }
+  body {
+    background: #fff;
+    color: #000;
+  }
+}

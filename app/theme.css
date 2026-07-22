@@ -1,0 +1,150 @@
+/* rinsaku-planner — per-product テーマ層（製品の "顔" をここで作る）
+ *
+ * globals.css は共通の構造・a11y・コンポーネント挙動を持つ "出発点" です。
+ * このファイルは globals.css の後に読み込まれ、:root トークンを上書きして
+ * 各製品に固有の個性（色・温度感・形・密度・タイポ）を与えます。
+ *
+ * ■ 必須ルール
+ *   - デフォルト（インディゴ・バイオレット）のまま出荷しない。最低でも accent と
+ *     neutral-hue を製品の世界観に合わせて変えること。
+ *   - accent は light/dark 双方で WCAG AA を満たす L 値にする（下の検証手順参照）。
+ *   - 構造クラス（.btn / .card / .hero …）の見た目を個別に CSS で書き換えない。
+ *     個性はトークンで出す。これで一貫性と a11y を保ったまま別物の顔になる。
+ *
+ * ■ 上書きできる主トークン（これだけで十分に化ける）
+ *   --accent-h / --accent-s / --accent-l   accent の色相・彩度・明度（tint/shade は自動派生）
+ *   --accent-fg                            accent 上の文字色（明 accent なら濃色に）
+ *   --neutral-hue / --neutral-chroma       グレースケールの温度感・色味の濃さ
+ *   --radius / --radius-sm / --radius-lg   形（角の丸み＝ブランドの硬軟）
+ *   --font-sans / --font-display           タイポ（display を変えると見出しの印象が大きく動く）
+ *   --density                              余白の伸縮（0.9 密 〜 1.1 ゆったり）
+ *
+ * ■ AA 検証手順（出荷前に必ず）
+ *   1) light: --accent と #ffffff/--accent-fg の対比 ≥ 4.5:1（テキスト）/ ≥ 3:1（大文字・UI境界）
+ *   2) dark : 上で持ち上げた accent と --bg の対比を同様に確認
+ *   ブラウザ devtools のコントラスト表示か任意のチェッカーで確認する。
+ *
+ * ▼ 使い方: 下の preset を 1 つ選んで :root に展開するか、個別トークンを直接書く。
+ *   layout.tsx は globals.css の後に ./theme.css を import 済み。
+ */
+
+:root {
+  /* === この製品の個性（編集する場所） ===
+   * 既定値は globals.css のインディゴ・バイオレット。製品に合わせて変更すること。
+   * 例として下に 4 つの mood preset をコメントで用意した。1 つ選んで値を写すか、
+   * 独自の HSL を入れる。 */
+
+  /* --- 例: そのまま使うと "プレースホルダのまま" 扱い。必ず触ること。 ---
+  --accent-h: 248;
+  --accent-s: 64%;
+  --accent-l: 56%;
+  --neutral-hue: 232;
+  --radius: 12px;
+  --density: 1;
+  */
+}
+
+/* =========================================================================
+ * Mood presets — :root にコピーして使う（値は light 基準・dark は globals が自動調整）
+ * ========================================================================= */
+
+/* 各 preset の L 値は light で white/accent・accent/bg ともに ≥4.9:1（AA 余裕）になるよう
+   検証済み。色相・彩度を動かす場合は theme.css 冒頭の AA 検証手順で再確認すること。 */
+
+/* 1) "Trust / Tooling" — 落ち着いたティール。実務ツール・計算機・自治体系に。
+   --accent-h: 188; --accent-s: 64%; --accent-l: 32%; --accent-fg: #ffffff;
+   --neutral-hue: 210; --neutral-chroma: 12%; --radius: 10px; --density: 0.95;
+*/
+
+/* 2) "Warm / Friendly" — 親しみのあるコーラル。図鑑・子ども向け・生活系に。
+   --accent-h: 14; --accent-s: 72%; --accent-l: 44%; --accent-fg: #ffffff;
+   --neutral-hue: 28; --neutral-chroma: 16%; --radius: 16px; --density: 1.05;
+*/
+
+/* 3) "Editorial / Premium" — 深いボルドー＋温かいグレー。読み物・上質訴求に。
+   --accent-h: 348; --accent-s: 56%; --accent-l: 44%; --accent-fg: #ffffff;
+   --neutral-hue: 24; --neutral-chroma: 10%; --radius: 6px; --density: 1.05;
+   --font-display: "Hiragino Mincho ProN", "Yu Mincho", serif;
+*/
+
+/* 4) "Fresh / Growth" — 鮮やかなエメラルド。健康・環境・進捗系に。
+   --accent-h: 158; --accent-s: 66%; --accent-l: 30%; --accent-fg: #ffffff;
+   --neutral-hue: 168; --neutral-chroma: 10%; --radius: 14px; --density: 1;
+*/
+
+/* =========================================================================
+ * 畑めぐり（rinsaku-planner）の顔 — "土とアースカラー" identity
+ * accent = くすんだ葉グリーン / neutral = 温かみのあるウォームグレー（黄み寄り）
+ *
+ * AA 検証（WCAG 2.1 相対輝度・実測値）:
+ * accent = 深いリーフグリーン / neutral = 黄み寄りウォームグレー（土の地）
+ * secondary = 素焼き鉢テラコッタ（--soil*：section accent 用の NEW トークン）
+ *   light: accent(h125 s48 l28) vs #ffffff/--bg ... 6.64 / 6.59 (AA text)
+ *          --text vs --bg                        ... 15.4 (AAA)
+ *          --soil(h22 s60 l36) vs surface/bg     ... 6.10 / 6.26 (AA text)
+ *          --text/--text-soft vs --soil-tint     ... 13.7 / 6.81 (AA)
+ *   dark : accent 自動持ち上げ vs dark --bg        ... 10.75
+ *          --soil(h28 s60 l66) vs surface/bg     ... 7.45 / 8.39 (AA text)
+ *          family dots 全15科 light(l38)≥3.03 / dark(l64)≥4.25（UI graphic 閾値超・科名テキスト併記）
+ * ========================================================================= */
+:root {
+  --accent-h: 125;
+  --accent-s: 48%;
+  --accent-l: 28%; /* 深いリーフグリーン（s/l を締めて葉の濃さ。light で white/bg とも ≥6.5:1） */
+  --accent-fg: #ffffff;
+
+  --neutral-hue: 68; /* 黄み寄りのウォームグレー＝土の地 */
+  --neutral-chroma: 10%; /* 色味は控えめに（くすませて上質に） */
+
+  --radius: 14px; /* 畝・区画の "畑らしい" 柔らかい角 */
+  --radius-lg: 20px;
+  --density: 1; /* グリッド操作のタップ余白を確保するため詰めない */
+
+  /* 見出しは丸み・人文体のシステムフォントで親しみを出す（web フォント不使用・順次フォールバック）。 */
+  --font-display:
+    "Hiragino Maru Gothic ProN", "ヒラギノ丸ゴ ProN",
+    "Hiragino Maru Gothic Pro", "Rounded Mplus 1c", "Yu Gothic", "YuGothic",
+    "Hiragino Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+
+  /* NEW: 素焼き鉢テラコッタ（section accent 専用の二次色・semantic は絶対に上書きしない）。 */
+  --soil: hsl(
+    22 60% 36%
+  ); /* light: surface 上 6.10:1（AA text・見出し/marker に） */
+  --soil-tint: hsl(28 55% 94%); /* 温かいセクション帯（--text 13.7:1） */
+  --soil-line: hsl(28 38% 80%); /* 土の継ぎ目・divider 罫 */
+
+  /* NEW: 科カラーの地（family dot・色だけに依存させない＝科名テキスト併記が正）。
+   * 注: 現状 15 科の hue で light の最小コントラストは hue60(イネ科)の 3.03:1（UI graphic 3:1 ぎりぎり）。
+   * hue 追加や --fam-l を上げる際はこの下限を割らないこと（割っても科名テキスト併記で機能毀損はしないが装飾として確保）。 */
+  --fam-s: 55%;
+  --fam-l: 38%;
+
+  /* セマンティック色の AA 補正（light）。
+   * globals の light --ok(#0f9d6b) は ok-tint 上で 3.22:1 と本文 AA 不足、
+   * --err も err-tint 上 4.28:1 と marginal。連作 verdict / alert / badge の
+   * 文字（tint 上）が読めるよう前景色のみ製品スコープで補正する。
+   * 実測 color on tint / on surface: err 5.37/5.84・ok 4.99/5.18（warn 既定 4.53 は据置）。 */
+  --err: hsl(4 78% 42%);
+  --ok: hsl(157 84% 26%);
+}
+
+/* セマンティック色の AA 補正（dark）。
+ * globals は dark で *-tint だけを暗転させ --err/--warn/--ok を持ち上げないため、
+ * tint 上の文字（連作 verdict＝本製品の中核フィードバック / alert / badge）が
+ * dark で AA 割れする（err 3.08 / warn 2.64 / ok 3.64）。前景色のみ持ち上げて回復する。
+ * 意味は tint 背景＋アイコン形状＋テキストの三重符号化で保持。
+ * 実測 color on tint / on surface: err 6.33/6.87・warn 7.53/9.16・ok 7.20/9.19。 */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --err: hsl(4 86% 74%);
+    --warn: hsl(36 90% 66%);
+    --ok: hsl(157 60% 62%);
+
+    /* NEW soil 系を dark で持ち上げ（AA 確保）。 */
+    --soil: hsl(28 60% 66%); /* dark: surface 7.45:1 / bg 8.39:1（AA text） */
+    --soil-tint: hsl(28 30% 16%); /* --text 12.5:1 */
+    --soil-line: hsl(28 22% 26%);
+
+    --fam-l: 64%; /* 暗背景でドットを持ち上げ（全15科 ≥4.25:1） */
+  }
+}
