@@ -32,6 +32,31 @@ export const FAMILIES = /** @type {Family[]} */ ([
   { key: "lamiaceae", nameJa: "シソ科", rotationYears: 1 },
 ]);
 
+/**
+ * 科ごとの色相（区画セルの芽グリフ・科ドットの地色）。純装飾で、科名は必ず
+ * テキストで併記する＝色だけに意味を持たせない（a11y）。
+ * 早見表（lib/reference.mjs）と区画グリッド（components/BedGrid）が同じ色を
+ * 使うよう、科のメタデータとしてここに置く。
+ * @type {Record<string, number>}
+ */
+export const FAMILY_HUE = {
+  solanaceae: 280,
+  cucurbitaceae: 150,
+  brassicaceae: 90,
+  fabaceae: 210,
+  apiaceae: 175,
+  asteraceae: 48,
+  amaranthaceae: 350,
+  convolvulaceae: 325,
+  poaceae: 60,
+  allium: 190,
+  zingiberaceae: 30,
+  araceae: 120,
+  malvaceae: 15,
+  rosaceae: 340,
+  lamiaceae: 255,
+};
+
 /** 作物マスタ（科でまとめて記載）。 */
 export const CROPS = /** @type {Crop[]} */ ([
   // ===== ナス科 =====

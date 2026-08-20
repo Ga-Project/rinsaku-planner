@@ -1,0 +1,60 @@
+<!-- OGP 画像（public/og.png・1200x630）の生成元。
+     再生成:
+       "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless=new \
+         --disable-gpu --hide-scrollbars --window-size=1200,630 \
+         --screenshot=public/og.png "file://$PWD/tools/og-source.html"
+     注意: チップの年数（ナス科4年 等）は app/lib/crops.mjs の FAMILIES と手で揃えている。
+     マスタを変えたらこのファイルも直して og.png を焼き直すこと。 -->
+<!doctype html><html lang="ja"><head><meta charset="utf-8"><style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  :root{
+    --accent:hsl(125 48% 28%);
+    --soil:hsl(22 60% 36%);
+    --soil-tint:hsl(28 55% 94%);
+    --soil-line:hsl(28 38% 80%);
+    --bg:hsl(68 30% 97.5%);
+    --text:hsl(68 22% 12%);
+    --text-soft:hsl(68 12% 34%);
+    --font:"Hiragino Maru Gothic ProN","Hiragino Sans","Yu Gothic",system-ui,sans-serif;
+  }
+  html,body{width:1200px;height:630px}
+  body{background:var(--bg);font-family:var(--font);color:var(--text);position:relative;overflow:hidden}
+  .soil{position:absolute;left:0;right:0;bottom:0;height:210px;background:var(--soil-tint)}
+  .furrow{position:absolute;left:0;right:0;bottom:0}
+  .wrap{position:relative;padding:76px 80px;height:100%;display:flex;flex-direction:column}
+  .brand{display:flex;align-items:center;gap:16px;margin-bottom:38px}
+  .mark{width:64px;height:64px;border-radius:20px;background:var(--accent);color:#fff;
+        display:flex;align-items:center;justify-content:center;font-size:34px;font-weight:800}
+  .name{font-size:34px;font-weight:800;letter-spacing:.02em}
+  h1{font-size:76px;line-height:1.24;font-weight:800;word-break:keep-all;letter-spacing:.01em}
+  h1 .ac{color:var(--accent)}
+  p{margin-top:26px;font-size:29px;line-height:1.6;color:var(--text-soft);max-width:940px}
+  .chips{margin-top:auto;display:flex;gap:14px;position:relative;z-index:2}
+  .chip{padding:12px 22px;border-radius:999px;background:#fff;border:1px solid var(--soil-line);
+        font-size:24px;font-weight:700;display:flex;align-items:center;gap:10px}
+  .dot{width:14px;height:14px;border-radius:999px}
+</style></head><body>
+  <div class="soil"></div>
+  <svg class="furrow" viewBox="0 0 1200 210" width="1200" height="210" aria-hidden="true">
+    <path d="M0 46 Q300 20 600 46 T1200 46 V210 H0 Z" fill="hsl(28 38% 80%)" opacity=".5"/>
+    <path d="M0 96 Q300 74 600 96 T1200 96 V210 H0 Z" fill="hsl(28 38% 80%)" opacity=".38"/>
+    <g stroke="hsl(125 48% 28%)" stroke-width="4" stroke-linecap="round" fill="none" opacity=".9">
+      <g transform="translate(980 62)"><path d="M0 0 V-34"/>
+        <path d="M0 -18 C0 -31 -16 -36 -29 -36 C-29 -23 -13 -18 0 -18 Z" fill="hsl(125 48% 28%)" opacity=".9" stroke="none"/>
+        <path d="M0 -23 C0 -36 16 -41 29 -41 C29 -28 13 -23 0 -23 Z" fill="hsl(125 48% 28%)" opacity=".72" stroke="none"/></g>
+      <g transform="translate(1090 84)"><path d="M0 0 V-26"/>
+        <path d="M0 -14 C0 -24 -12 -28 -22 -28 C-22 -18 -10 -14 0 -14 Z" fill="hsl(125 48% 28%)" opacity=".85" stroke="none"/></g>
+    </g>
+  </svg>
+  <div class="wrap">
+    <div class="brand"><div class="mark">畑</div><div class="name">畑めぐり</div></div>
+    <h1>区画ごとに、<span class="ac">連作をひと目で</span>。</h1>
+    <p>畝やプランターを並べて、育てる野菜を置くだけ。同じ科を続けて植えていないか、色と印で教えてくれます。</p>
+    <div class="chips">
+      <div class="chip"><span class="dot" style="background:hsl(280 55% 38%)"></span>ナス科は4年</div>
+      <div class="chip"><span class="dot" style="background:hsl(150 55% 38%)"></span>ウリ科は3年</div>
+      <div class="chip"><span class="dot" style="background:hsl(90 55% 38%)"></span>アブラナ科は2年</div>
+      <div class="chip">登録不要・ブラウザで完結</div>
+    </div>
+  </div>
+</body></html>

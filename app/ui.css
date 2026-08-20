@@ -572,6 +572,177 @@ select:focus {
   height: 1.1rem;
 }
 
+/* ===== 読み物（早見表 / FAQ）=====
+ * プランナーの下に置く「畑の台帳」風の参照セクション。
+ * 既存トークン（--soil 系＝素焼き鉢テラコッタ、--fam*＝科の色相）だけで構成し、
+ * 新しい色は足さない＝製品の顔を保つ。
+ * あける年数の重さは「色 + 罫の太さ + 文言」の三重符号化で、色だけに依存させない。
+ * コントラスト: チップの文字は常に --text（*-tint 背景の検証済みペア）を使う。 */
+.reference {
+  margin-top: var(--sp-12);
+  padding-block: var(--sp-12);
+  border-top: 1px solid var(--soil-line);
+  background: var(--surface-sunken);
+}
+.ref-head {
+  max-width: var(--container-narrow);
+}
+.ref-head h2 {
+  margin: var(--sp-2) 0 0;
+  font-family: var(--font-display);
+  font-size: var(--fs-xl);
+  line-height: var(--lh-tight);
+}
+.ref-head-faq {
+  margin-top: var(--sp-12);
+}
+.ref-lead {
+  margin: var(--sp-3) 0 0;
+  color: var(--text-soft);
+  line-height: var(--lh-base);
+}
+
+/* 表は横スクロールを自分の中で完結させる（本文が横に伸びない）。 */
+.ref-table-wrap {
+  margin-top: var(--sp-6);
+  overflow-x: auto;
+  border: 1px solid var(--soil-line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+.ref-table {
+  width: 100%;
+  min-width: 34rem;
+  border-collapse: collapse;
+  font-size: var(--fs-sm);
+}
+.ref-table th,
+.ref-table td {
+  padding: var(--sp-3) var(--sp-4);
+  text-align: left;
+  vertical-align: baseline;
+}
+/* ヘッダ行は土帯色＝タイムラインの見出し行と同じ語彙。 */
+.ref-table thead th {
+  background: var(--soil-tint);
+  color: var(--text-soft);
+  font-weight: var(--fw-semibold);
+  white-space: nowrap;
+}
+.ref-table tbody tr + tr th,
+.ref-table tbody tr + tr td {
+  border-top: 1px solid var(--border);
+}
+.ref-table tbody th {
+  white-space: nowrap;
+  font-weight: var(--fw-semibold);
+  color: var(--text);
+}
+.ref-dot {
+  display: inline-block;
+  width: 0.6rem;
+  height: 0.6rem;
+  margin-right: var(--sp-2);
+  border-radius: var(--radius-pill);
+  background: hsl(var(--fam, 125) var(--fam-s) var(--fam-l));
+}
+.ref-crops {
+  color: var(--text-soft);
+}
+
+/* あける年数チップ。左罫の色と太さで重さを示し、文字色は常に --text。 */
+.ref-years {
+  display: inline-block;
+  padding: var(--sp-1) var(--sp-3);
+  border-radius: var(--radius-sm);
+  border-left: 3px solid var(--border-strong);
+  background: var(--surface-sunken);
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.ref-years.is-heavy {
+  border-left-width: 5px;
+  border-left-color: var(--soil);
+  background: var(--soil-tint);
+  font-weight: var(--fw-semibold);
+}
+.ref-years.is-mid {
+  border-left-color: var(--accent);
+  background: var(--accent-tint);
+}
+.ref-years.is-light {
+  border-left-color: var(--ok);
+  background: var(--ok-tint);
+}
+
+.ref-note {
+  margin-top: var(--sp-4);
+  font-size: var(--fs-sm);
+  color: var(--text-soft);
+}
+
+/* FAQ。details/summary で開閉（中身は HTML に存在するので読み手にも検索にも届く）。 */
+.ref-faq {
+  margin-top: var(--sp-5);
+  max-width: var(--container-narrow);
+  border: 1px solid var(--soil-line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  overflow: hidden;
+}
+.ref-faq-item + .ref-faq-item {
+  border-top: 1px solid var(--border);
+}
+.ref-faq-item > summary {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-3);
+  padding: var(--sp-4);
+  cursor: pointer;
+  list-style: none;
+  font-weight: var(--fw-semibold);
+  transition: background var(--transition);
+}
+.ref-faq-item > summary::-webkit-details-marker {
+  display: none;
+}
+/* 開閉インジケータは疑似要素の三角（アイコン資産を増やさない）。 */
+.ref-faq-item > summary::before {
+  content: "";
+  flex: none;
+  width: 0;
+  height: 0;
+  margin-top: 0.35em;
+  border-left: 0.42rem solid var(--soil);
+  border-top: 0.3rem solid transparent;
+  border-bottom: 0.3rem solid transparent;
+  transition: transform var(--transition);
+}
+.ref-faq-item[open] > summary::before {
+  transform: rotate(90deg);
+}
+.ref-faq-item > summary:hover {
+  background: var(--soil-tint);
+}
+.ref-faq-item > summary:focus-visible {
+  /* リングをカードの内側に出す（外側だと隣接行の罫と重なる）。 */
+  outline: 2px solid var(--focus);
+  outline-offset: -3px;
+}
+.ref-faq-a {
+  margin: 0;
+  padding: 0 var(--sp-4) var(--sp-4) calc(var(--sp-4) + 0.42rem + var(--sp-3));
+  color: var(--text-soft);
+  line-height: var(--lh-base);
+}
+@media (prefers-reduced-motion: reduce) {
+  .ref-faq-item > summary,
+  .ref-faq-item > summary::before {
+    transition: none;
+  }
+}
+
 /* ===== レスポンシブ ===== */
 @media (max-width: 640px) {
   .row-2 {

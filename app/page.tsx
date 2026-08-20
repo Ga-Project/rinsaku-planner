@@ -2,6 +2,7 @@
 // ヒーローはサーバーコンポーネント、本体（PlannerApp）はクライアントの島。
 import { PlannerApp } from "./components/PlannerApp";
 import { IconLeafMark } from "./components/icons";
+import { ReferenceSection } from "./components/ReferenceSection";
 
 export default function Home() {
   return (
@@ -101,8 +102,8 @@ export default function Home() {
               <a className="btn btn-primary btn-lg" href="#app">
                 畑をつくる
               </a>
-              <a className="btn btn-secondary btn-lg" href="#app">
-                使い方を見る
+              <a className="btn btn-secondary btn-lg" href="#guide">
+                連作あけ年数を調べる
               </a>
             </div>
             <p className="hero-note">
@@ -118,6 +119,10 @@ export default function Home() {
             <PlannerApp />
           </div>
         </section>
+
+        {/* 読み物（早見表・FAQ）。サーバー描画なので静的HTMLに焼き込まれ、
+            プランナーを触る前でも連作の目安が読める。 */}
+        <ReferenceSection />
       </main>
 
       <footer className="site-footer no-print">

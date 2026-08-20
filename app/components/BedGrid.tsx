@@ -3,7 +3,7 @@
 import type { CSSProperties } from "react";
 import type { Garden, Bed } from "../lib/types";
 import { bedStatus } from "../lib/rotation.mjs";
-import { cropById } from "../lib/crops.mjs";
+import { cropById, FAMILY_HUE } from "../lib/crops.mjs";
 import { StateBadge } from "./status-ui";
 import { IconPlus, IconSeedling } from "./icons";
 
@@ -12,24 +12,6 @@ const KIND_LABEL: Record<Bed["kind"], string> = {
   planter: "プランター",
 };
 
-// 科ごとの色相（区画セルの芽グリフ・科ドットの tint・純装飾＝科名は常にテキスト併記）。
-const FAMILY_HUE: Record<string, number> = {
-  solanaceae: 280,
-  cucurbitaceae: 150,
-  brassicaceae: 90,
-  fabaceae: 210,
-  apiaceae: 175,
-  asteraceae: 48,
-  amaranthaceae: 350,
-  convolvulaceae: 325,
-  poaceae: 60,
-  allium: 190,
-  zingiberaceae: 30,
-  araceae: 120,
-  malvaceae: 15,
-  rosaceae: 340,
-  lamiaceae: 255,
-};
 
 export function BedGrid({
   garden,
