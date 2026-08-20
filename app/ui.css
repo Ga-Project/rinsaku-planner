@@ -574,27 +574,40 @@ select:focus {
 
 /* ===== 読み物（早見表 / FAQ）=====
  * プランナーの下に置く「畑の台帳」風の参照セクション。
- * 既存トークン（--soil 系＝素焼き鉢テラコッタ、--fam*＝科の色相）だけで構成し、
- * 新しい色は足さない＝製品の顔を保つ。
- * あける年数の重さは「色 + 罫の太さ + 文言」の三重符号化で、色だけに依存させない。
- * コントラスト: チップの文字は常に --text（*-tint 背景の検証済みペア）を使う。 */
-.reference {
-  margin-top: var(--sp-12);
-  padding-block: var(--sp-12);
-  border-top: 1px solid var(--soil-line);
+ * 既存トークン（--soil 系＝素焼き鉢テラコッタ、--fam*＝科の色相、
+ * --warn/--ok＝プランナー本体と同じ重篤度ランプ）だけで構成し、新しい色は足さない。
+ *
+ * ■ あける年数の段階表現
+ *   プランナー本体（.verdict / .bed-state）が既に err/warn/ok の重篤度ランプを持つ。
+ *   ここで別のランプを新設すると同じ製品内で色の意味が二重化するため、同じ語彙を使う。
+ *   --accent はブランド色かつ「OK」寄りの意味なので、注意側の段階には使わない。
+ *     4年以上 heavy … --soil-tint  + 太い --soil 罫（最も注意）
+ *     2–3年   mid   … --warn-tint  + --warn 罫（標準的にあける）
+ *     1年     light … --surface    + --border-strong 罫（軽い）
+ *     0年     none  … --ok-tint    + --ok 罫（続けて植えやすい）
+ *   文字色は常に --text（*-tint は --text 前提で検証済みのペア）。
+ *   色に意味を持たせきらず、年数のラベル自体が段階を語る二重符号化にしている。 */
+.reference,
+.reference-faq {
   background: var(--surface-sunken);
 }
-.ref-head {
-  max-width: var(--container-narrow);
+.reference {
+  padding-block: var(--sp-12) var(--sp-8);
 }
-.ref-head h2 {
+.reference-faq {
+  padding-block: var(--sp-8) var(--sp-12);
+}
+/* sticky ヘッダ（--header-h）の下に見出しが潜らないよう着地点をずらす。 */
+#guide,
+#faq {
+  scroll-margin-top: calc(var(--header-h) + var(--sp-4));
+}
+.ref-head h2,
+.reference-faq h2 {
   margin: var(--sp-2) 0 0;
   font-family: var(--font-display);
   font-size: var(--fs-xl);
   line-height: var(--lh-tight);
-}
-.ref-head-faq {
-  margin-top: var(--sp-12);
 }
 .ref-lead {
   margin: var(--sp-3) 0 0;
@@ -602,7 +615,8 @@ select:focus {
   line-height: var(--lh-base);
 }
 
-/* 表は横スクロールを自分の中で完結させる（本文が横に伸びない）。 */
+/* 表は横スクロールを自分の中で完結させる（本文が横に伸びない）。
+   スクロールするコンテナはキーボードでも送れるよう focusable にしている（TSX 側）。 */
 .ref-table-wrap {
   margin-top: var(--sp-6);
   overflow-x: auto;
@@ -612,7 +626,6 @@ select:focus {
 }
 .ref-table {
   width: 100%;
-  min-width: 34rem;
   border-collapse: collapse;
   font-size: var(--fs-sm);
 }
@@ -638,6 +651,10 @@ select:focus {
   font-weight: var(--fw-semibold);
   color: var(--text);
 }
+.ref-fam {
+  display: inline-flex;
+  align-items: baseline;
+}
 .ref-dot {
   display: inline-block;
   width: 0.6rem;
@@ -650,13 +667,13 @@ select:focus {
   color: var(--text-soft);
 }
 
-/* あける年数チップ。左罫の色と太さで重さを示し、文字色は常に --text。 */
+/* あける年数チップ。左罫の色と太さで段階を示し、文字色は常に --text。 */
 .ref-years {
   display: inline-block;
   padding: var(--sp-1) var(--sp-3);
   border-radius: var(--radius-sm);
   border-left: 3px solid var(--border-strong);
-  background: var(--surface-sunken);
+  background: var(--surface);
   color: var(--text);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -668,10 +685,11 @@ select:focus {
   font-weight: var(--fw-semibold);
 }
 .ref-years.is-mid {
-  border-left-color: var(--accent);
-  background: var(--accent-tint);
+  border-left-width: 4px;
+  border-left-color: var(--warn);
+  background: var(--warn-tint);
 }
-.ref-years.is-light {
+.ref-years.is-none {
   border-left-color: var(--ok);
   background: var(--ok-tint);
 }
@@ -685,7 +703,6 @@ select:focus {
 /* FAQ。details/summary で開閉（中身は HTML に存在するので読み手にも検索にも届く）。 */
 .ref-faq {
   margin-top: var(--sp-5);
-  max-width: var(--container-narrow);
   border: 1px solid var(--soil-line);
   border-radius: var(--radius-lg);
   background: var(--surface);
@@ -713,14 +730,18 @@ select:focus {
   flex: none;
   width: 0;
   height: 0;
-  margin-top: 0.35em;
-  border-left: 0.42rem solid var(--soil);
-  border-top: 0.3rem solid transparent;
-  border-bottom: 0.3rem solid transparent;
+  margin-top: 0.3em;
+  border-left: 0.55rem solid var(--soil);
+  border-top: 0.4rem solid transparent;
+  border-bottom: 0.4rem solid transparent;
   transition: transform var(--transition);
 }
 .ref-faq-item[open] > summary::before {
   transform: rotate(90deg);
+}
+/* 開いている項目は左に土色の縦罫を立てて、開閉できる集まりだと分かるようにする。 */
+.ref-faq-item[open] {
+  box-shadow: inset 3px 0 0 var(--soil);
 }
 .ref-faq-item > summary:hover {
   background: var(--soil-tint);
@@ -732,14 +753,73 @@ select:focus {
 }
 .ref-faq-a {
   margin: 0;
-  padding: 0 var(--sp-4) var(--sp-4) calc(var(--sp-4) + 0.42rem + var(--sp-3));
+  padding: 0 var(--sp-4) var(--sp-4) calc(var(--sp-4) + 0.55rem + var(--sp-3));
   color: var(--text-soft);
   line-height: var(--lh-base);
+}
+/* 読み終わりからプランナーへ戻る主導線。 */
+.ref-cta {
+  margin-top: var(--sp-6);
 }
 @media (prefers-reduced-motion: reduce) {
   .ref-faq-item > summary,
   .ref-faq-item > summary::before {
     transition: none;
+  }
+}
+
+/* 狭い画面では表を積んでカードにする（横スクロールでは3列目が画面外に出て、
+   右に送ると何の科の行か分からなくなるため）。列見出しは data-label で各セルに戻す。 */
+@media (max-width: 640px) {
+  .ref-table-wrap {
+    overflow-x: visible;
+    border: none;
+    border-radius: 0;
+    background: none;
+  }
+  .ref-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  .ref-table tbody tr {
+    display: block;
+    padding: var(--sp-4);
+    border: 1px solid var(--soil-line);
+    border-radius: var(--radius);
+    background: var(--surface);
+  }
+  .ref-table tbody tr + tr {
+    margin-top: var(--sp-3);
+  }
+  .ref-table tbody th,
+  .ref-table tbody td {
+    display: grid;
+    grid-template-columns: 7.5rem 1fr;
+    gap: var(--sp-3);
+    align-items: baseline;
+    padding: 0;
+    white-space: normal;
+  }
+  .ref-table tbody tr + tr th,
+  .ref-table tbody tr + tr td {
+    border-top: none;
+  }
+  .ref-table tbody th + td,
+  .ref-table tbody td + td {
+    margin-top: var(--sp-3);
+    padding-top: var(--sp-3);
+    border-top: 1px solid var(--border);
+  }
+  .ref-table tbody th::before,
+  .ref-table tbody td::before {
+    content: attr(data-label);
+    color: var(--text-soft);
+    font-weight: var(--fw-normal);
+    font-size: var(--fs-xs);
   }
 }
 

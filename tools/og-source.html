@@ -3,8 +3,9 @@
        "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless=new \
          --disable-gpu --hide-scrollbars --window-size=1200,630 \
          --screenshot=public/og.png "file://$PWD/tools/og-source.html"
-     注意: チップの年数（ナス科4年 等）は app/lib/crops.mjs の FAMILIES と手で揃えている。
-     マスタを変えたらこのファイルも直して og.png を焼き直すこと。 -->
+     チップには年数や科名の具体値を書かない。画像はマスタ（app/lib/crops.mjs）から
+     自動生成されないため、具体値を焼き込むとマスタを直したときに黙ってズレる。
+     定性的な文言だけにしてズレようのない状態を保つ（test/reference.test.mjs が検査する）。 -->
 <!doctype html><html lang="ja"><head><meta charset="utf-8"><style>
   *{margin:0;padding:0;box-sizing:border-box}
   :root{
@@ -51,9 +52,9 @@
     <h1>区画ごとに、<span class="ac">連作をひと目で</span>。</h1>
     <p>畝やプランターを並べて、育てる野菜を置くだけ。同じ科を続けて植えていないか、色と印で教えてくれます。</p>
     <div class="chips">
-      <div class="chip"><span class="dot" style="background:hsl(280 55% 38%)"></span>ナス科は4年</div>
-      <div class="chip"><span class="dot" style="background:hsl(150 55% 38%)"></span>ウリ科は3年</div>
-      <div class="chip"><span class="dot" style="background:hsl(90 55% 38%)"></span>アブラナ科は2年</div>
+      <div class="chip"><span class="dot" style="background:hsl(280 55% 38%)"></span>科ごとのあけ年数</div>
+      <div class="chip"><span class="dot" style="background:hsl(150 55% 38%)"></span>作付けスケジュール</div>
+      <div class="chip"><span class="dot" style="background:hsl(90 55% 38%)"></span>相性のよい野菜</div>
       <div class="chip">登録不要・ブラウザで完結</div>
     </div>
   </div>

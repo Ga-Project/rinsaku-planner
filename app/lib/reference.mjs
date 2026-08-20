@@ -7,20 +7,57 @@
 //   このモジュールは同じ crops.mjs から読み物用の形を導出し、サーバー側で描画できる
 //   ようにする。数値を手で書き写さないので、マスタを直せば早見表も FAQ も追従する。
 //
+// ■ 段階（tier）はここにしか置かない
+//   「あける年数の重さ」を表す境界は rotationTier() が唯一の定義。表示側（チップの
+//   見た目）も文言（早見表のラベル・FAQ 本文）も同じ関数を通す。境界が複数箇所に
+//   散ると、早見表が「1年」と書いている科を FAQ が「あけなくてよい」と言う、といった
+//   同一ページ内の矛盾が起きる。
+//
 // ■ 構造化データとの関係
-//   layout.tsx の FAQPage JSON-LD は、ここの FAQ をそのまま使う。画面に出 している
-//   文言と構造化データが同一オブジェクト由来になるため、「構造化データだけにある
-//   FAQ」が原理的に発生しない（検索エンジンのガイドライン違反を構造で防ぐ）。
+//   FAQPage / WebApplication の JSON-LD はこのモジュールが組み立てる。FAQ は画面に
+//   描画しているのと同じ配列を使うため、「構造化データにだけある FAQ」が原理的に
+//   発生しない（検索エンジンのガイドライン違反を構造で防ぐ）。
 
 import { FAMILIES, CROPS, FAMILY_HUE } from "./crops.mjs";
+import { SITE_URL } from "./site.mjs";
 
 /** 早見表に載せる代表野菜の最大数（多すぎると表が読めなくなる）。 */
 const SAMPLE_CROP_LIMIT = 6;
 
+/** 製品名・説明の唯一の出典（メタデータと構造化データで使い回す）。 */
+export const SITE_NAME = "畑めぐり";
+export const SITE_TITLE = "畑めぐり｜家庭菜園の輪作・連作プランナー";
+export const SITE_DESCRIPTION =
+  "畝やプランターの区画を並べ、育てる野菜を置くだけ。同じ科を続けて植える連作障害を色と印でひと目で判定し、12か月の作付けスケジュールを管理できる家庭菜園プランナー。登録不要・ブラウザですぐ使えます。";
+
+/**
+ * あける年数の段階。境界の定義はここ 1 箇所だけ。
+ * - heavy: 土壌病害が残りやすく、家庭菜園で最も注意が要る
+ * - mid  : 標準的にあける
+ * - light: 1年だけあける
+ * - none : あけずに続けられる
+ * @param {number} years
+ * @returns {"heavy" | "mid" | "light" | "none"}
+ */
+export function rotationTier(years) {
+  if (years >= 4) return "heavy";
+  if (years >= 2) return "mid";
+  if (years >= 1) return "light";
+  return "none";
+}
+
+/**
+ * あける年数の表示文言。0 は「年数」ではなく状態なので言い換える。
+ * @param {number} years
+ */
+export function rotationYearsLabel(years) {
+  return rotationTier(years) === "none" ? "続けて植えやすい" : `${years}年`;
+}
+
 /**
  * 科ごとの「あける年数 + 代表的な野菜」を、あける年数の降順で返す。
  * 年数が同じときはマスタ（FAMILIES）の並び順を保つ＝安定ソート。
- * @returns {{ key: string, nameJa: string, rotationYears: number, hue: number, crops: string[], cropCount: number }[]}
+ * @returns {{ key: string, nameJa: string, rotationYears: number, tier: string, hue: number, crops: string[], cropCount: number }[]}
  */
 export function familyReference() {
   return FAMILIES.map((f, i) => {
@@ -29,7 +66,9 @@ export function familyReference() {
       key: f.key,
       nameJa: f.nameJa,
       rotationYears: f.rotationYears,
-      hue: FAMILY_HUE[f.key] ?? 125,
+      tier: rotationTier(f.rotationYears),
+      // フォールバックを置かない: 科を足して色相を忘れたらテストで落とす（黙って既定色にしない）。
+      hue: FAMILY_HUE[f.key],
       crops: members.slice(0, SAMPLE_CROP_LIMIT).map((c) => c.nameJa),
       cropCount: members.length,
       _order: i,
@@ -38,14 +77,6 @@ export function familyReference() {
     .filter((f) => f.cropCount > 0)
     .sort((a, b) => b.rotationYears - a.rotationYears || a._order - b._order)
     .map(({ _order, ...rest }) => rest);
-}
-
-/**
- * あける年数の表示文言。0 は「年数」ではなく状態なので言い換える。
- * @param {number} years
- */
-export function rotationYearsLabel(years) {
-  return years === 0 ? "続けて植えやすい" : `${years}年`;
 }
 
 /**
@@ -58,14 +89,19 @@ function years(key) {
   return f.rotationYears;
 }
 
-/** 連作障害が出にくい（rotationYears <= 1）科の名前。FAQ 本文に使う。 */
-function easyFamilies() {
-  return FAMILIES.filter((f) => f.rotationYears <= 1).map((f) => f.nameJa);
+/**
+ * 指定した段階に属する科の名前（マスタ順）。FAQ 本文に使う。
+ * @param {"heavy" | "mid" | "light" | "none"} tier
+ */
+function familiesInTier(tier) {
+  return FAMILIES.filter((f) => rotationTier(f.rotationYears) === tier).map(
+    (f) => f.nameJa,
+  );
 }
 
 /**
  * よくある質問。画面表示（ReferenceSection）と FAQPage 構造化データの唯一の出典。
- * 年数は必ず years() 経由でマスタから取り、本文に直書きしない。
+ * 年数・科の分類は必ず years() / familiesInTier() 経由でマスタから取り、本文に直書きしない。
  * @type {{ q: string, a: string }[]}
  */
 export const FAQ = [
@@ -83,11 +119,11 @@ export const FAQ = [
   },
   {
     q: "ウリ科・アブラナ科・マメ科はどのくらいあけますか？",
-    a: `キュウリ・カボチャなどのウリ科は${years("cucurbitaceae")}年、エダマメ・インゲンなどのマメ科は${years("fabaceae")}年、キャベツ・ダイコンなどのアブラナ科は${years("brassicaceae")}年が目安です。マメ科は根粒菌で土を豊かにする一方、ネコブセンチュウが増えやすいため、年数をあけない扱いにはできません。`,
+    a: `キュウリ・カボチャなどのウリ科は${years("cucurbitaceae")}年、キャベツ・ダイコンなどのアブラナ科は${years("brassicaceae")}年、エダマメ・インゲンなどのマメ科は${years("fabaceae")}年が目安です。マメ科は根粒菌で土を豊かにする一方、ネコブセンチュウが増えやすいため、年数をあけない扱いにはできません。`,
   },
   {
     q: "連作障害が出にくい野菜はありますか？",
-    a: `${easyFamilies().join("・")}は比較的連作に強いとされ、あいだをあけずに続けやすいグループです。サツマイモ（ヒルガオ科）やトウモロコシ（イネ科）が代表で、前の作で荒れた区画をはさむ「休ませ役」としても使えます。ただし連作に強い＝無制限ではなく、土づくりは通常どおり必要です。`,
+    a: `${familiesInTier("none").join("・")}はあいだをあけずに続けやすいグループで、サツマイモやトウモロコシが代表です。前の作で荒れた区画をはさむ「休ませ役」としても使えます。${familiesInTier("light").join("・")}も比較的連作に強く、1年あければ十分とされています。連作に強い＝無制限ではないので、土づくりは通常どおり必要です。`,
   },
   {
     q: "プランターやベランダでも連作障害は起きますか？",
@@ -104,7 +140,7 @@ export const FAQ = [
 ];
 
 /**
- * FAQPage 構造化データのオブジェクト。JSON.stringify してそのまま埋め込む。
+ * FAQPage 構造化データ。画面に描画しているのと同じ FAQ 配列から生成する。
  * @param {{ q: string, a: string }[]} faq
  */
 export function faqJsonLd(faq = FAQ) {
@@ -116,5 +152,30 @@ export function faqJsonLd(faq = FAQ) {
       name: f.q,
       acceptedAnswer: { "@type": "Answer", text: f.a },
     })),
+  };
+}
+
+/** 画面に出している機能をそのまま列挙する（ここに無い機能を構造化データに書かない）。 */
+const FEATURE_LIST = [
+  "畝・プランターの区画を並べて作付けを記録",
+  "同じ科の連作を色と印で判定",
+  "12か月の作付けスケジュール表示",
+  "コンパニオンプランツの相性表示",
+];
+
+/** WebApplication 構造化データ。無料であることと主題を検索エンジンに示す。 */
+export function appJsonLd() {
+  return {
+    "@context": "https://schema.org",
+    "@type": "WebApplication",
+    name: SITE_NAME,
+    url: SITE_URL,
+    applicationCategory: "LifestyleApplication",
+    operatingSystem: "Web",
+    inLanguage: "ja",
+    isAccessibleForFree: true,
+    offers: { "@type": "Offer", price: "0", priceCurrency: "JPY" },
+    description: SITE_DESCRIPTION,
+    featureList: FEATURE_LIST,
   };
 }

@@ -12,7 +12,6 @@ const KIND_LABEL: Record<Bed["kind"], string> = {
   planter: "プランター",
 };
 
-
 export function BedGrid({
   garden,
   selectedBedId,
@@ -53,7 +52,7 @@ export function BedGrid({
             style={
               latest
                 ? ({
-                    "--fam": FAMILY_HUE[latest.familyKey] ?? 125,
+                    "--fam": FAMILY_HUE[latest.familyKey],
                   } as CSSProperties)
                 : undefined
             }

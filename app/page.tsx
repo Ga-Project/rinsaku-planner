@@ -1,12 +1,32 @@
-// 畑めぐり — ランディング（ヒーロー）＋ 区画プランナー本体。
+// 畑めぐり — ランディング（ヒーロー）＋ 区画プランナー本体 ＋ 読み物。
 // ヒーローはサーバーコンポーネント、本体（PlannerApp）はクライアントの島。
+import type { Metadata } from "next";
 import { PlannerApp } from "./components/PlannerApp";
 import { IconLeafMark } from "./components/icons";
 import { ReferenceSection } from "./components/ReferenceSection";
+import { SITE_URL } from "./lib/site.mjs";
+import { faqJsonLd, appJsonLd } from "./lib/reference.mjs";
+
+// canonical はページ固有。layout に置くと 404 ページがトップへの canonical を
+// 継承してしまう（noindex と矛盾するシグナルになる）。
+export const metadata: Metadata = {
+  alternates: { canonical: SITE_URL },
+};
 
 export default function Home() {
   return (
     <>
+      {/* 構造化データもページ固有。FAQPage は ReferenceSection が描画しているのと
+          同じ FAQ 配列から生成するので、画面に無い Q&A は入らない。 */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(appJsonLd()) }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd()) }}
+      />
+
       <a className="skip-link" href="#app">
         本文へスキップ
       </a>
@@ -103,7 +123,7 @@ export default function Home() {
                 畑をつくる
               </a>
               <a className="btn btn-secondary btn-lg" href="#guide">
-                連作あけ年数を調べる
+                あけ年数の早見表
               </a>
             </div>
             <p className="hero-note">

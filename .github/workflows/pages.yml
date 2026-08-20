@@ -38,9 +38,29 @@ jobs:
       - name: Scan full history
         run: gitleaks detect --no-banner --redact
 
+  # ---------------------------------------------------------------------------
+  # 型・lint・テスト。build を needs にするため、ここで落ちると公開に進まない。
+  # 早見表/FAQ/構造化データと作物マスタの一致は test で固定しているので、
+  # このジョブが無いとその保証は「手で回したときだけ」になる。
+  # ---------------------------------------------------------------------------
+  checks:
+    name: Typecheck / Lint / Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm lint
+      - run: pnpm test
+
   build:
     name: Build (static export)
-    needs: secret-scan # スキャン通過が前提。fail 時は skip され公開されない。
+    needs: [secret-scan, checks] # 双方の通過が前提。fail 時は skip され公開されない。
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
