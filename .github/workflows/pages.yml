@@ -6,13 +6,18 @@ name: Deploy to GitHub Pages
 on:
   push:
     branches: [main]
+  # PR でも検査は回す（マージ後に初めて落ちる状態にしない）。
+  # 公開そのもの（build / deploy）は main への push のときだけ実行する。
+  pull_request:
+    branches: [main]
 
 # 最小権限。書き込みが要るのは deploy job のみ（下で job 単位に付与）。
 permissions:
   contents: read
 
 concurrency:
-  group: pages
+  # PR の検査が main の公開をキャンセルしないよう、ref ごとに分ける。
+  group: pages-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -61,6 +66,7 @@ jobs:
   build:
     name: Build (static export)
     needs: [secret-scan, checks] # 双方の通過が前提。fail 時は skip され公開されない。
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
