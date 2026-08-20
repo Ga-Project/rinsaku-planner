@@ -814,6 +814,11 @@ select:focus {
     padding-top: var(--sp-3);
     border-top: 1px solid var(--border);
   }
+  /* grid のセルに置いた要素は既定で列幅いっぱいに伸びる。チップは中身の幅で
+     置きたいので start に寄せる（伸びると「帯」に見えて印の意味が薄れる）。 */
+  .ref-table tbody td > .ref-years {
+    justify-self: start;
+  }
   .ref-table tbody th::before,
   .ref-table tbody td::before {
     content: attr(data-label);
