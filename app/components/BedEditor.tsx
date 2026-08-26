@@ -101,9 +101,11 @@ export function BedEditor({
         plantings={bed.plantings}
         month={currentMonth}
         year={currentYear}
-        onPick={(id) => {
+        onPick={(id, targetYear) => {
           setCropId(id);
-          setYear(currentYear);
+          // 候補はその年に植える前提で連作を判定しているので、年も候補側に合わせる
+          // （12月に「1月から蒔けます」を選ぶと翌年になる）。入力中の年は上書きされる。
+          setYear(targetYear);
           // 選んだ結果が入るフォームまで視線を運ぶ（下にあって見えないことがある）。
           cropSelectRef.current?.focus();
         }}

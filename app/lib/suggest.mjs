@@ -9,25 +9,11 @@
 import { evaluateRotation } from "./rotation.mjs";
 
 /**
+ * 形の正は app/lib/types.ts（rotation.mjs と types.ts の関係に合わせる）。
  * @typedef {import("./types").Crop} Crop
- * @typedef {import("./types").RotationStatus} RotationStatus
+ * @typedef {import("./types").Timing} Timing
+ * @typedef {import("./types").Suggestion} Suggestion
  * @typedef {import("./rotation.mjs").PastPlanting} PastPlanting
- */
-
-/**
- * @typedef {"now" | "soon"} Timing
- *   now=今月がその作物の種まき/植え付け適期 / soon=翌月から適期に入る
- */
-
-/**
- * @typedef {Object} Suggestion
- * @property {string} cropId
- * @property {string} nameJa
- * @property {string} familyJa
- * @property {string} familyKey
- * @property {Timing} timing
- * @property {RotationStatus} status この区画にその科を targetYear に植えた場合の連作判定
- * @property {string} reason 判定の日本語説明（rotation.mjs の文言をそのまま使う）
  */
 
 /** 表示順に使うステータスの並び（軽い順）。 */
@@ -38,11 +24,12 @@ const TIMING_ORDER = { now: 0, soon: 1 };
 
 /**
  * 1..12 に正規化した「翌月」を返す（12月の翌月は1月）。
+ * 見出しラベルもこれを使う（折返しの実装が2箇所に割れると表示だけ静かにズレる）。
  *
  * @param {number} month
  * @returns {number}
  */
-function nextMonth(month) {
+export function nextMonth(month) {
   return month === 12 ? 1 : month + 1;
 }
 
@@ -54,10 +41,27 @@ function nextMonth(month) {
  * @returns {Timing | null}
  */
 function timingOf(sowMonths, month) {
-  const list = Array.isArray(sowMonths) ? sowMonths : [];
+  // 値域の検証は姉妹モジュール schedule.mjs の monthsToBars と流儀を揃える。
+  const list = (Array.isArray(sowMonths) ? sowMonths : []).filter(
+    (m) => Number.isInteger(m) && m >= 1 && m <= 12,
+  );
   if (list.includes(month)) return "now";
   if (list.includes(nextMonth(month))) return "soon";
   return null;
+}
+
+/**
+ * その候補を実際に植えることになる年。
+ * 12月に見た「翌月（1月）」は翌年の作付けなので、連作の間隔もその年で数える
+ * （当年で数えるとあけた年数を1年少なく見積もり、出すべき候補を落とす）。
+ *
+ * @param {Timing} timing
+ * @param {number} month 1–12
+ * @param {number} year
+ * @returns {number}
+ */
+function targetYearOf(timing, month, year) {
+  return timing === "soon" && month === 12 ? year + 1 : year;
 }
 
 /**
@@ -70,14 +74,17 @@ function timingOf(sowMonths, month) {
  * @param {{cropId: string, year: number}[]} plantings 対象区画の作付け履歴
  * @param {Crop[]} crops 作物マスタ
  * @param {number} month 対象の暦月（1–12）。範囲外なら空配列を返す
- * @param {number} year 植えようとしている年（西暦・整数）
+ * @param {number} year 今の年（西暦・整数）。12月の「翌月」候補だけは year + 1 で判定する
  * @returns {Suggestion[]}
  */
 export function suggestPlantings(plantings, crops, month, year) {
   if (!Number.isInteger(month) || month < 1 || month > 12) return [];
   if (!Number.isInteger(year)) return [];
 
-  const list = Array.isArray(crops) ? crops : [];
+  // 不正要素はここで1度だけ落とす（Map 構築と走査で防御が食い違わないように）。
+  const list = (Array.isArray(crops) ? crops : []).filter(
+    (c) => c && typeof c.id === "string",
+  );
   const cropMap = new Map(list.map((c) => [c.id, c]));
 
   // 区画の履歴を「科 × 年」に落とす（作物マスタに無い id は判定から外す）。
@@ -97,11 +104,16 @@ export function suggestPlantings(plantings, crops, month, year) {
   /** @type {{order: number, suggestion: Suggestion}[]} */
   const out = [];
   list.forEach((c, index) => {
-    if (!c || typeof c.id !== "string") return;
     const timing = timingOf(c.sowMonths, month);
     if (timing === null) return;
 
-    const result = evaluateRotation(past, c.familyKey, c.rotationYears, year);
+    const targetYear = targetYearOf(timing, month, year);
+    const result = evaluateRotation(
+      past,
+      c.familyKey,
+      c.rotationYears,
+      targetYear,
+    );
     out.push({
       order: index,
       suggestion: {
@@ -110,7 +122,9 @@ export function suggestPlantings(plantings, crops, month, year) {
         familyJa: c.familyJa,
         familyKey: c.familyKey,
         timing,
+        targetYear,
         status: result.status,
+        lastSameFamilyYear: result.lastSameFamilyYear,
         reason: result.reason,
       },
     });

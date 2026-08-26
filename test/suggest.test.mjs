@@ -112,24 +112,55 @@ test("同じ年に同じ科を植えていれば ng（1年に2度は連作）", 
   assert.equal(byId["hakusai"].status, "ng");
 });
 
+/** 1月まきの作物（年跨ぎ検査用）。あけ年数3年＝判定年が1年ずれると結果が変わる。 */
+const JANUARY_CROP = [
+  {
+    id: "jan-mame",
+    nameJa: "テストマメ",
+    familyJa: "マメ科",
+    familyKey: "fabaceae",
+    rotationYears: 3,
+    sowMonths: [1],
+    harvestMonths: [6],
+    companionGood: [],
+    companionBad: [],
+    note: "",
+  },
+];
+
 test("12月の翌月は1月として扱う（年をまたぐ soon）", () => {
-  const january = [
-    {
-      id: "jan-crop",
-      nameJa: "テスト作物",
-      familyJa: "イネ科",
-      familyKey: "poaceae",
-      rotationYears: 0,
-      sowMonths: [1],
-      harvestMonths: [6],
-      companionGood: [],
-      companionBad: [],
-      note: "",
-    },
-  ];
-  const out = suggestPlantings([], january, 12, 2026);
+  const out = suggestPlantings([], JANUARY_CROP, 12, 2026);
   assert.equal(out.length, 1);
   assert.equal(out[0].timing, "soon");
+});
+
+test("12月に見た「翌月」は翌年の作付けとして年を繰り上げる", () => {
+  const out = suggestPlantings([], JANUARY_CROP, 12, 2026);
+  assert.equal(out[0].targetYear, 2027, "12月の soon は翌年に植える");
+
+  // 同月でも「今月が適期」の候補は当年のまま
+  const now = suggestPlantings([], JANUARY_CROP, 1, 2026);
+  assert.equal(now[0].timing, "now");
+  assert.equal(now[0].targetYear, 2026);
+});
+
+test("年跨ぎの連作判定は翌年で数える（当年で数えると候補を1年ぶん取りこぼす）", () => {
+  // 2024年にマメ科を植えた区画を 2026年12月に見る。
+  // 実際に植えるのは 2027年1月 → gap 3 = 目安ちょうど＝ caution（出すべき候補）。
+  // 当年(2026)で数えると gap 2 < 3 で ng になり、soon から黙って消える。
+  const past = [{ cropId: "jan-mame", year: 2024 }];
+  const out = suggestPlantings(past, JANUARY_CROP, 12, 2026);
+
+  assert.equal(out[0].targetYear, 2027);
+  assert.equal(out[0].status, "caution");
+  assert.equal(out[0].lastSameFamilyYear, 2024);
+
+  const g = groupSuggestions(out);
+  assert.deepEqual(
+    g.soon.map((s) => s.cropId),
+    ["jan-mame"],
+    "翌年で数えれば候補として残る",
+  );
 });
 
 test("並びは now→soon、同じ時期なら ok→caution→ng", () => {
@@ -145,6 +176,25 @@ test("並びは now→soon、同じ時期なら ok→caution→ng", () => {
       ["now", "ng"],
       ["soon", "ok"],
     ],
+  );
+});
+
+test("timing も status も同じ候補は、作物マスタの登録順に並ぶ", () => {
+  // FIXTURE の 8月 now・履歴なし → aki-nasu, hakusai がいずれも ok。
+  // マスタの並び（aki-nasu が先）がそのまま出力順になる。
+  const asc = suggestPlantings([], FIXTURE, 8, 2026);
+  assert.deepEqual(
+    asc.filter((s) => s.timing === "now").map((s) => s.cropId),
+    ["aki-nasu", "hakusai"],
+  );
+
+  // マスタの順を入れ替えれば出力順も入れ替わる（登録順が効いていることの確認）。
+  const swapped = [FIXTURE[1], FIXTURE[0], ...FIXTURE.slice(2)];
+  assert.deepEqual(
+    suggestPlantings([], swapped, 8, 2026)
+      .filter((s) => s.timing === "now")
+      .map((s) => s.cropId),
+    ["hakusai", "aki-nasu"],
   );
 });
 
@@ -168,7 +218,23 @@ test("マスタに無い cropId の履歴は判定から無視される（落ち
 
 test("不正な入力でも例外にならない", () => {
   assert.deepEqual(suggestPlantings(null, null, 8, 2026), []);
-  assert.deepEqual(suggestPlantings(undefined, FIXTURE, 8, 2026).length > 0, true);
+  assert.ok(suggestPlantings(undefined, FIXTURE, 8, 2026).length > 0);
+  // 作物マスタ側に null / id 欠けが混ざっても落ちず、健全な要素だけを返す
+  const dirty = [null, { nameJa: "id無し" }, ...FIXTURE];
+  assert.deepEqual(
+    suggestPlantings([], dirty, 8, 2026)
+      .filter((s) => s.timing === "now")
+      .map((s) => s.cropId),
+    ["aki-nasu", "hakusai"],
+  );
+});
+
+test("種まき月に範囲外の値が混ざっていても無視される", () => {
+  const broken = [
+    { ...FIXTURE[0], id: "broken", sowMonths: [0, 13, 8.5, 8] },
+  ];
+  assert.equal(suggestPlantings([], broken, 8, 2026)[0].timing, "now");
+  assert.deepEqual(suggestPlantings([], broken, 13, 2026), []);
 });
 
 test("groupSuggestions は今月ok/要注意/避けたい/翌月に振り分ける", () => {

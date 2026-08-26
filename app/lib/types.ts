@@ -98,3 +98,23 @@ export interface BedRotation extends Omit<RotationResult, "status"> {
   latestCropId: string | null;
   latestYear: number | null;
 }
+
+/** 種まき適期が「今月」か「翌月から」か。 */
+export type Timing = "now" | "soon";
+
+/** suggestPlantings が返す1件（区画 × 暦月で絞り込んだ作付け候補）。 */
+export interface Suggestion {
+  cropId: string;
+  nameJa: string;
+  familyJa: string;
+  familyKey: string;
+  timing: Timing;
+  /** 実際に植えることになる年。12月に見た「翌月」は翌年なので閲覧年と一致しない。 */
+  targetYear: number;
+  /** その区画にその科を targetYear に植えた場合の連作判定。 */
+  status: RotationStatus;
+  /** 同じ科を直近で植えた年（無ければ null）。 */
+  lastSameFamilyYear: number | null;
+  /** 判定の日本語説明。 */
+  reason: string;
+}

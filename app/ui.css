@@ -381,6 +381,10 @@ select:focus {
 .plantnow-group.is-ng .plantnow-group-head {
   color: var(--err);
 }
+/* soon は「まだ蒔けない」ので、今月の3グループより一段弱く置く。 */
+.plantnow-group.is-soon .plantnow-group-head {
+  color: var(--text-soft);
+}
 
 .plantnow-chips {
   display: flex;
@@ -418,10 +422,15 @@ select:focus {
   font-weight: var(--fw-medium);
   line-height: 1.2;
 }
-.plantnow-chip-family {
+.plantnow-chip-family,
+.plantnow-chip-note {
   font-size: var(--fs-xs);
   color: var(--text-soft);
   line-height: 1.2;
+}
+.plantnow-chip-note {
+  margin-top: 2px;
+  font-weight: var(--fw-medium);
 }
 .plantnow-group.is-ok .plantnow-chip {
   border-color: color-mix(in srgb, var(--ok) 35%, var(--border));
@@ -429,11 +438,10 @@ select:focus {
 .plantnow-group.is-caution .plantnow-chip {
   border-color: color-mix(in srgb, var(--warn) 35%, var(--border));
 }
+/* NG は押す前に理由が分かる状態にしたいので、地色でも差をつけ、
+   チップ内に「いつ同じ科を植えたか」を可視テキストで添える（.plantnow-chip-note）。 */
 .plantnow-group.is-ng .plantnow-chip {
   border-color: color-mix(in srgb, var(--err) 35%, var(--border));
-}
-/* NG は「押せるが、押す前に理由が分かる」状態にしたいので、地色でも差をつける。 */
-.plantnow-group.is-ng .plantnow-chip {
   background: var(--err-tint);
 }
 
