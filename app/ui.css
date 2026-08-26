@@ -318,6 +318,135 @@ select:focus {
   color: var(--ok);
 }
 
+/* ===== いま植えられる野菜（区画×暦月のしぼりこみ） =====
+   判定の重篤度は .verdict / .bed-state と同じ ok/caution/ng ランプに揃える。
+   意味は必ず見出しのテキストが持ち、色は補助（色だけに意味を持たせない）。 */
+.plantnow {
+  margin-top: var(--sp-5);
+  padding: var(--sp-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+.plantnow-title {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin: 0;
+  font-size: var(--fs-base);
+  font-weight: var(--fw-semibold);
+}
+.plantnow-lead,
+.plantnow-foot {
+  font-size: var(--fs-sm);
+}
+.plantnow-lead {
+  margin: var(--sp-2) 0 var(--sp-3);
+}
+.plantnow-foot {
+  margin: var(--sp-3) 0 0;
+  font-size: var(--fs-xs);
+}
+
+.plantnow-group + .plantnow-group {
+  margin-top: var(--sp-4);
+}
+.plantnow-group-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-1) var(--sp-2);
+  margin: 0 0 var(--sp-2);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+}
+.plantnow-group-head svg {
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+.plantnow-group-head .muted {
+  font-weight: var(--fw-normal);
+  font-size: var(--fs-xs);
+}
+.plantnow-group.is-ok .plantnow-group-head {
+  color: var(--text-soft);
+}
+.plantnow-group.is-ok .plantnow-group-head svg {
+  color: var(--ok);
+}
+.plantnow-group.is-caution .plantnow-group-head {
+  color: var(--warn);
+}
+.plantnow-group.is-ng .plantnow-group-head {
+  color: var(--err);
+}
+
+.plantnow-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}
+.plantnow-chip {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  /* タッチ target 44px を満たす高さ（padding + 2行の行送り）。 */
+  padding: var(--sp-2) var(--sp-3);
+  min-height: 44px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color var(--transition),
+    transform var(--transition);
+}
+.plantnow-chip:hover {
+  border-color: var(--accent);
+  transform: translateY(-1px);
+}
+.plantnow-chip:active {
+  transform: translateY(0);
+}
+.plantnow-chip-name {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  line-height: 1.2;
+}
+.plantnow-chip-family {
+  font-size: var(--fs-xs);
+  color: var(--text-soft);
+  line-height: 1.2;
+}
+.plantnow-group.is-ok .plantnow-chip {
+  border-color: color-mix(in srgb, var(--ok) 35%, var(--border));
+}
+.plantnow-group.is-caution .plantnow-chip {
+  border-color: color-mix(in srgb, var(--warn) 35%, var(--border));
+}
+.plantnow-group.is-ng .plantnow-chip {
+  border-color: color-mix(in srgb, var(--err) 35%, var(--border));
+}
+/* NG は「押せるが、押す前に理由が分かる」状態にしたいので、地色でも差をつける。 */
+.plantnow-group.is-ng .plantnow-chip {
+  background: var(--err-tint);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .plantnow-chip {
+    transition: none;
+  }
+  .plantnow-chip:hover,
+  .plantnow-chip:active {
+    transform: none;
+  }
+}
+
 /* ===== 12 か月タイムライン ===== */
 .timeline {
   overflow-x: auto;

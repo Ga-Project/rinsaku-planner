@@ -1,11 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import type { Bed, BedKind } from "../lib/types";
 import { bedStatus, evaluateRotation } from "../lib/rotation.mjs";
 import { cropById, cropsGroupedByFamily } from "../lib/crops.mjs";
 import { summarizeMonths } from "../lib/schedule.mjs";
 import { Verdict, StateBadge } from "./status-ui";
+import { PlantNow } from "./PlantNow";
 import { IconPlus, IconTrash } from "./icons";
 
 const GROUPS = cropsGroupedByFamily();
@@ -13,6 +14,7 @@ const GROUPS = cropsGroupedByFamily();
 export function BedEditor({
   bed,
   currentYear,
+  currentMonth,
   onUpdateBed,
   onAddPlanting,
   onRemovePlanting,
@@ -20,6 +22,7 @@ export function BedEditor({
 }: {
   bed: Bed;
   currentYear: number;
+  currentMonth: number;
   onUpdateBed: (patch: Partial<Pick<Bed, "label" | "kind">>) => void;
   onAddPlanting: (cropId: string, year: number) => void;
   onRemovePlanting: (plantingId: string) => void;
@@ -30,6 +33,7 @@ export function BedEditor({
   // 追加・プレビュー時のみ currentYear を既定値として適用する。
   const [year, setYear] = useState<number | "">(currentYear);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const cropSelectRef = useRef<HTMLSelectElement>(null);
 
   const status = bedStatus(bed.plantings, cropById);
 
@@ -91,6 +95,20 @@ export function BedEditor({
         <Verdict status={status.status} reason={status.reason} />
       )}
 
+      {/* この区画の履歴と今月の適期から、植えられる作物を先に見せる。
+          選ぶと下の追加フォームに入り、そのまま記録できる。 */}
+      <PlantNow
+        plantings={bed.plantings}
+        month={currentMonth}
+        year={currentYear}
+        onPick={(id) => {
+          setCropId(id);
+          setYear(currentYear);
+          // 選んだ結果が入るフォームまで視線を運ぶ（下にあって見えないことがある）。
+          cropSelectRef.current?.focus();
+        }}
+      />
+
       <h4 style={{ marginTop: "var(--sp-6)", marginBottom: 0 }}>
         作付けの記録
       </h4>
@@ -129,6 +147,7 @@ export function BedEditor({
           <label htmlFor="add-crop">作物</label>
           <select
             id="add-crop"
+            ref={cropSelectRef}
             value={cropId}
             onChange={(e) => setCropId(e.target.value)}
           >

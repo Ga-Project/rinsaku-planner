@@ -223,6 +223,10 @@ export function PlannerApp() {
   const selectedBed =
     activeGarden.beds.find((b) => b.id === selectedBedId) ?? null;
 
+  // 「今」は編集パネルの既定年と、いま植えられる作物の判定に使う。
+  // ここに到達するのは mounted 後だけなので、ハイドレーション不整合は起きない。
+  const now = new Date();
+
   return (
     <>
       {error && (
@@ -347,7 +351,8 @@ export function PlannerApp() {
             <BedEditor
               key={selectedBed.id}
               bed={selectedBed}
-              currentYear={new Date().getFullYear()}
+              currentYear={now.getFullYear()}
+              currentMonth={now.getMonth() + 1}
               onUpdateBed={(patch) => updateBed(selectedBed.id, patch)}
               onAddPlanting={(cropId, year) =>
                 addPlanting(selectedBed.id, cropId, year)
