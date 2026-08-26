@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import type { Bed, BedKind } from "../lib/types";
+import type { Bed, BedKind, Suggestion } from "../lib/types";
 import { bedStatus, evaluateRotation } from "../lib/rotation.mjs";
 import { cropById, cropsGroupedByFamily } from "../lib/crops.mjs";
 import { summarizeMonths } from "../lib/schedule.mjs";
@@ -33,6 +33,8 @@ export function BedEditor({
   // 追加・プレビュー時のみ currentYear を既定値として適用する。
   const [year, setYear] = useState<number | "">(currentYear);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  // 候補を押したときに何が起きたかを読み上げ・目視の双方に伝える（選択は画面下のフォームで起きる）。
+  const [pickNotice, setPickNotice] = useState("");
   const cropSelectRef = useRef<HTMLSelectElement>(null);
 
   const status = bedStatus(bed.plantings, cropById);
@@ -92,24 +94,40 @@ export function BedEditor({
       </div>
 
       {status.status !== "empty" && (
-        <Verdict status={status.status} reason={status.reason} />
+        <>
+          {/* このバナーは「すでに記録した作付け」を、それ以前の記録に照らして判定したもの。
+              すぐ下の候補は「これから植える場合」の判定で時制が違うため、
+              どちらの話かを必ず言葉で分ける（同じランプ色が隣り合うので取り違えられる）。 */}
+          {status.latestCropId !== null && status.latestYear !== null && (
+            <p className="muted verdict-scope">
+              すでに記録した作付けの判定 ── {status.latestYear}年{" "}
+              {cropById(status.latestCropId)?.nameJa ?? status.latestCropId}
+            </p>
+          )}
+          <Verdict status={status.status} reason={status.reason} />
+        </>
       )}
 
-      {/* この区画の履歴と今月の適期から、植えられる作物を先に見せる。
+      {/* この区画の記録と今月の適期から、これから植えられる作物を先に見せる。
           選ぶと下の追加フォームに入り、そのまま記録できる。 */}
       <PlantNow
         plantings={bed.plantings}
         month={currentMonth}
         year={currentYear}
-        onPick={(id, targetYear) => {
-          setCropId(id);
+        selectedCropId={cropId}
+        onPick={(s: Suggestion) => {
+          setCropId(s.cropId);
           // 候補はその年に植える前提で連作を判定しているので、年も候補側に合わせる
-          // （12月に「1月から蒔けます」を選ぶと翌年になる）。入力中の年は上書きされる。
-          setYear(targetYear);
+          // （12月に「1月からの作付け」を選ぶと翌年になる）。入力中の年は上書きされる。
+          setYear(s.targetYear);
+          setPickNotice(`${s.nameJa}を選びました。${s.reason}`);
           // 選んだ結果が入るフォームまで視線を運ぶ（下にあって見えないことがある）。
           cropSelectRef.current?.focus();
         }}
       />
+      <p className="visually-hidden" role="status" aria-live="polite">
+        {pickNotice}
+      </p>
 
       <h4 style={{ marginTop: "var(--sp-6)", marginBottom: 0 }}>
         作付けの記録

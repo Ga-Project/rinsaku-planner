@@ -161,3 +161,13 @@ export function IconLeafMark(props: IconProps) {
     </Base>
   );
 }
+
+/** 時計。まだその時期でない（翌月からの作付け）ことを示す。 */
+export function IconClock(props: IconProps) {
+  return (
+    <Base {...props}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7.5V12l3 1.8" />
+    </Base>
+  );
+}

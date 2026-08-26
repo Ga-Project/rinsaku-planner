@@ -319,22 +319,20 @@ select:focus {
 }
 
 /* ===== いま植えられる野菜（区画×暦月のしぼりこみ） =====
-   判定の重篤度は .verdict / .bed-state と同じ ok/caution/ng ランプに揃える。
+   状態の表現は既存の .verdict と同じ流儀（tint の地で立てる）に揃える。
+   枠の 35% 混色では地に対して 3:1 に届かず「押せる面」に見えなかったため、
+   地＝tint・枠＝--border-strong ベースにして非テキストの境界を確保する。
    意味は必ず見出しのテキストが持ち、色は補助（色だけに意味を持たせない）。 */
 .plantnow {
   margin-top: var(--sp-5);
   padding: var(--sp-4);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  background: var(--surface-2);
+  /* カード（--surface）の中に置くので、面を一段沈めて層を分ける。 */
+  background: var(--surface-sunken);
 }
 .plantnow-title {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-2);
   margin: 0;
-  font-size: var(--fs-base);
-  font-weight: var(--fw-semibold);
 }
 .plantnow-lead,
 .plantnow-foot {
@@ -365,14 +363,18 @@ select:focus {
   height: 16px;
   flex: none;
 }
-.plantnow-group-head .muted {
+.plantnow-group-note {
   font-weight: var(--fw-normal);
   font-size: var(--fs-xs);
 }
-.plantnow-group.is-ok .plantnow-group-head {
-  color: var(--text-soft);
+/* 補足が折り返したとき、見出しから切れた独立文に見えないようアイコン幅ぶん下げる。 */
+@media (max-width: 640px) {
+  .plantnow-group-note {
+    flex-basis: 100%;
+    padding-left: calc(16px + var(--sp-2));
+  }
 }
-.plantnow-group.is-ok .plantnow-group-head svg {
+.plantnow-group.is-ok .plantnow-group-head {
   color: var(--ok);
 }
 .plantnow-group.is-caution .plantnow-group-head {
@@ -381,14 +383,18 @@ select:focus {
 .plantnow-group.is-ng .plantnow-group-head {
   color: var(--err);
 }
-/* soon は「まだ蒔けない」ので、今月の3グループより一段弱く置く。 */
+/* soon は「まだ植えられない」ので、今月の3グループより一段弱く置く。 */
 .plantnow-group.is-soon .plantnow-group-head {
   color: var(--text-soft);
 }
 
 .plantnow-chips {
-  display: flex;
-  flex-wrap: wrap;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  /* 内容依存の幅だと1行1個の痩せた行が続いて縦に伸びるので、等幅で敷き詰める。 */
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
   gap: var(--sp-2);
 }
 .plantnow-chip {
@@ -396,10 +402,11 @@ select:focus {
   flex-direction: column;
   align-items: flex-start;
   gap: 1px;
+  width: 100%;
   /* タッチ target 44px を満たす高さ（padding + 2行の行送り）。 */
   padding: var(--sp-2) var(--sp-3);
   min-height: 44px;
-  border: 1px solid var(--border);
+  border: 1.5px solid var(--border-strong);
   border-radius: var(--radius-sm);
   background: var(--surface);
   color: var(--text);
@@ -417,6 +424,11 @@ select:focus {
 .plantnow-chip:active {
   transform: translateY(0);
 }
+/* 選んだ候補が分かるようにする（選択は画面下のフォームで起きるので、戻ってきたとき用）。 */
+.plantnow-chip[aria-pressed="true"] {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-ring);
+}
 .plantnow-chip-name {
   font-size: var(--fs-sm);
   font-weight: var(--fw-medium);
@@ -430,19 +442,37 @@ select:focus {
 }
 .plantnow-chip-note {
   margin-top: 2px;
-  font-weight: var(--fw-medium);
+  font-weight: var(--fw-bold);
 }
+/* 推奨・注意・回避は tint の地で示す（.verdict と同じ表現）。
+   答えである推奨群が一番弱く見える状態にしない。 */
 .plantnow-group.is-ok .plantnow-chip {
-  border-color: color-mix(in srgb, var(--ok) 35%, var(--border));
+  background: var(--ok-tint);
+  border-color: color-mix(in srgb, var(--ok) 70%, var(--border-strong));
 }
 .plantnow-group.is-caution .plantnow-chip {
-  border-color: color-mix(in srgb, var(--warn) 35%, var(--border));
+  background: var(--warn-tint);
+  border-color: color-mix(in srgb, var(--warn) 70%, var(--border-strong));
 }
-/* NG は押す前に理由が分かる状態にしたいので、地色でも差をつけ、
-   チップ内に「いつ同じ科を植えたか」を可視テキストで添える（.plantnow-chip-note）。 */
 .plantnow-group.is-ng .plantnow-chip {
-  border-color: color-mix(in srgb, var(--err) 35%, var(--border));
   background: var(--err-tint);
+  border-color: color-mix(in srgb, var(--err) 70%, var(--border-strong));
+}
+/* soon は控えめに置きたいが、--border-strong だけでは沈み面に対して
+   1.35:1 しかなく「押せる面」の境界として成立しない（実測）。
+   彩度を持たせず、明度差だけで 3:1 を確保する。 */
+.plantnow-group.is-soon .plantnow-chip {
+  border-color: color-mix(in srgb, var(--text-dim) 78%, var(--border-strong));
+}
+.plantnow-group.is-ng .plantnow-chip-note {
+  color: var(--err);
+}
+.plantnow-group.is-caution .plantnow-chip-note {
+  color: var(--warn);
+}
+
+.plantnow-more {
+  margin-top: var(--sp-2);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -453,6 +483,11 @@ select:focus {
   .plantnow-chip:active {
     transform: none;
   }
+}
+
+/* 判定バナーが「すでに記録した作付け」の話であることを示す小見出し。 */
+.verdict-scope {
+  margin: var(--sp-4) 0 var(--sp-1);
 }
 
 /* ===== 12 か月タイムライン ===== */

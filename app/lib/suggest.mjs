@@ -125,6 +125,12 @@ export function suggestPlantings(plantings, crops, month, year) {
         targetYear,
         status: result.status,
         lastSameFamilyYear: result.lastSameFamilyYear,
+        // 「あと何年あければ植えられるか」。避けたい候補が横並びになったとき、
+        // あと1年のものと あと4年のものを見分けるための数字。
+        remainingYears:
+          result.status === "ng" && result.gapYears !== null
+            ? result.requiredYears - result.gapYears
+            : null,
         reason: result.reason,
       },
     });

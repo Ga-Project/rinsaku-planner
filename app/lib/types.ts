@@ -115,6 +115,8 @@ export interface Suggestion {
   status: RotationStatus;
   /** 同じ科を直近で植えた年（無ければ null）。 */
   lastSameFamilyYear: number | null;
+  /** あと何年あければ植えられるか（status が ng のときだけ数値、他は null）。 */
+  remainingYears: number | null;
   /** 判定の日本語説明。 */
   reason: string;
 }
