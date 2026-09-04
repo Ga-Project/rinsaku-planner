@@ -30,6 +30,12 @@ export function SiteFooter() {
   return (
     <footer className="site-footer no-print">
       <div className="container">
+        {/* 全ページからガイドへ戻れるようにする。ここが無いと 60 ページの入口が
+            トップの本文中のボタン1個だけになる。 */}
+        <p className="footer-nav">
+          <Link href="/">畑めぐり トップ</Link>
+          <Link href="/yasai/">野菜別 連作ガイド</Link>
+        </p>
         <p>
           連作障害の年数や相性は一般的な目安です。地域・品種・土壌の状態によって変わります。最終的な作付けはご自身の環境に合わせてご判断ください。
         </p>

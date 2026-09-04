@@ -7,7 +7,12 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { SiteHeader, SiteFooter, Breadcrumb } from "../components/SiteChrome";
 import { IconSprout } from "../components/icons";
-import { cropIndex, cropIndexUrl, cropSlugs } from "../lib/cropPages.mjs";
+import {
+  cropIndex,
+  cropIndexUrl,
+  cropSlugs,
+  cropsByName,
+} from "../lib/cropPages.mjs";
 import { SITE_NAME } from "../lib/reference.mjs";
 import { SITE_URL } from "../lib/site.mjs";
 import { OG_IMAGE } from "../lib/og.mjs";
@@ -57,6 +62,7 @@ function breadcrumbJsonLd() {
 
 export default function CropIndexPage() {
   const families = cropIndex();
+  const byName = cropsByName();
   const total = cropSlugs().length;
 
   return (
@@ -95,24 +101,77 @@ export default function CropIndexPage() {
 
         <hr className="soil-divider no-print" aria-hidden="true" />
 
+        {/* 名前から引くという約束を果たす入口。科を知らないと辿れない構造だけだと
+            リード文の言っていることと実際にできることが食い違う。 */}
+        <section className="crop-index" aria-labelledby="byname-h">
+          <div className="container container-narrow">
+            <h2 id="byname-h">
+              <span className="with-marker">
+                <span className="section-marker" aria-hidden="true">
+                  <IconSprout />
+                </span>
+                名前から探す
+              </span>
+            </h2>
+            <p className="ref-lead">読み順に並べています。</p>
+            {/* 形の符号（○/◇）は「勧める／避ける」が同じページに並ぶ詳細ページの
+                ためのもの。ここは片方しか無いので付けない（意味の無い記号を足さない）。 */}
+            <ul className="crop-chips">
+              {byName.map((c) => (
+                <li key={c.slug}>
+                  <Link className="crop-chip" href={`/yasai/${c.slug}/`}>
+                    <span className="crop-chip-name">{c.name}</span>
+                    <span className="crop-chip-sub">{c.yearsLabel}</span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </section>
+
+        <hr className="soil-divider no-print" aria-hidden="true" />
+
+        <section className="crop-index" aria-labelledby="byfam-h">
+          <div className="container container-narrow">
+            <h2 id="byfam-h">
+              <span className="with-marker">
+                <span className="section-marker" aria-hidden="true">
+                  <IconSprout />
+                </span>
+                科から探す
+              </span>
+            </h2>
+            <nav className="crop-jump" aria-label="科へ移動">
+              <ul>
+                {families.map((f) => (
+                  <li key={f.key}>
+                    <a href={`#fam-${f.key}`}>{f.nameJa}</a>
+                  </li>
+                ))}
+              </ul>
+            </nav>
+          </div>
+        </section>
+
         <section className="crop-index">
           <div className="container container-narrow">
             {families.map((f) => (
               <section key={f.key} className="crop-family" aria-labelledby={`fam-${f.key}`}>
                 <div className="crop-family-head">
-                  <h2 id={`fam-${f.key}`}>
+                  <h3 id={`fam-${f.key}`}>
                     <span className="with-marker">
                       <span className="section-marker" aria-hidden="true">
                         <IconSprout />
                       </span>
                       {f.nameJa}
                     </span>
-                  </h2>
+                  </h3>
                   {/* 年数は色だけでなく必ず文字でも出す（色に意味を持たせない）。
-                      0年は「年数」ではなく状態なので「科の目安 続けて植えやすい」に
-                      ならないよう言い方を変える。 */}
+                      出すのは科の代表値ではなく、下に並ぶ野菜の実際の範囲。 */}
                   <span className={`ref-years is-${f.tier}`}>
-                    {f.tier === "none" ? "続けて植えやすい科" : `科の目安 ${f.yearsLabel}`}
+                    {f.tier === "none"
+                      ? "続けて植えやすい科"
+                      : `あけたい年数 ${f.yearsLabel}`}
                   </span>
                 </div>
                 {/* 作物ごとのあける年数を必ず併記する。科の代表値とずれる野菜

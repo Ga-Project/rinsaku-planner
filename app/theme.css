@@ -136,6 +136,14 @@
  * 実測 color on tint / on surface: err 6.33/6.87・warn 7.53/9.16・ok 7.20/9.19。 */
 @media (prefers-color-scheme: dark) {
   :root {
+    /* accent は globals.css の dark ブロックが 68% へ持ち上げているが、この
+       ファイルの素の :root（--accent-l: 28%）が後から読まれて同じ詳細度で
+       上書きしてしまう＝夜も昼の濃さのまま残る。ここで明示的に持ち上げ直す。
+       --accent-fg も同時に変える: 持ち上げた accent の上では #ffffff が
+       1.69:1 しか出ず、ボタンの文字が読めなくなる。 */
+    --accent-l: 68%; /* dark: accent 対 --bg 10.76:1 */
+    --accent-fg: hsl(var(--neutral-hue) 40% 8%); /* accent 上で 10.15:1 */
+
     --err: hsl(4 86% 74%);
     --warn: hsl(36 90% 66%);
     --ok: hsl(157 60% 62%);

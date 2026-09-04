@@ -1125,6 +1125,13 @@ select:focus {
   gap: 0.4rem;
 }
 
+/* 「3〜5月・8〜10月」が範囲の途中（3〜／5月）で割れないようにする。
+   改行してよいのは中黒の位置だけ。 */
+.crop-months,
+.crop-fact dd {
+  word-break: keep-all;
+}
+
 .crop-months svg {
   width: 1.05em;
   height: 1.05em;
@@ -1139,12 +1146,55 @@ select:focus {
   line-height: 1.85;
 }
 
+/* 「答えの続き」ではなく補足として読ませる。ラベルが無いと、直上の
+   あける年数の説明が続いているように見える。 */
+.crop-note-label {
+  display: inline-block;
+  margin-right: 0.5rem;
+  padding: 0.1rem 0.45rem;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--text-soft);
+}
+
 .crop-section {
   padding: var(--sp-5) 0;
 }
 
 .crop-section h2 {
   margin: 0 0 0.5rem;
+}
+
+/* 375px ではほぼ全ての見出しが2行になる。中央揃えのままだと印が1行目と
+   2行目の中間に浮くので、1行目の文字と光学的にそろえる。 */
+.crop-section .with-marker,
+.crop-index .with-marker,
+.crop-family-head .with-marker {
+  align-items: flex-start;
+}
+
+.crop-section .section-marker,
+.crop-index .section-marker,
+.crop-family-head .section-marker {
+  margin-top: 0.15em;
+}
+
+/* 助詞や動詞の途中で割れるのを避ける。未対応のブラウザでは normal に落ちる。 */
+.crop-section h2,
+.crop-index h2,
+.crop-family-head h3,
+.reference-faq h2 {
+  word-break: auto-phrase;
+}
+
+/* sticky ヘッダ（64px）の下に着地点が潜らないようにする。 */
+#main,
+.crop-section[aria-labelledby] h2,
+.crop-family[aria-labelledby] h3,
+.crop-index h2 {
+  scroll-margin-top: calc(var(--header-h) + var(--sp-3));
 }
 
 .crop-sub {
@@ -1189,7 +1239,8 @@ select:focus {
   display: inline-flex;
   align-items: baseline;
   gap: 0.45rem;
-  min-height: 32px;
+  /* 屋外・手袋での操作を想定して iOS HIG の 44px に合わせる。 */
+  min-height: 44px;
   padding: 0.42rem 0.72rem;
   border: 1.5px solid color-mix(in srgb, var(--text-dim) 78%, var(--border-strong));
   border-radius: var(--radius-pill);
@@ -1205,10 +1256,40 @@ a.crop-chip:hover {
   background: var(--accent-tint);
 }
 
-/* マスタに無い相手（花・ハーブ）はリンクにならないので、押せる見た目にしない。 */
+/* マスタに無い相手（花・ハーブ）はリンクにならないので、押せる見た目にしない。
+   線種は「間をあけたい」の符号に使っているため、ここでは使わない
+   （破線が2つの意味を持つと、良い側の花が避ける側に見える）。
+   押せないことは、地を沈ませることと文字色を落とすことで示す。 */
 .crop-chip.is-plain {
-  border-style: dashed;
+  border-color: var(--border);
+  background: transparent;
   color: var(--text-soft);
+}
+
+/* 勧めている並びと、間をあけたい並びを、チップ単体で区別する形の符号。
+   節見出しの ○ / ◇（.crop-sub）と同じ語彙。色には意味を持たせない。
+   ::before は支援技術に読まれないので、意味は見出し側が担保したまま。 */
+.crop-chips.is-good .crop-chip::before,
+.crop-chips.is-avoid .crop-chip::before {
+  font-size: 0.75em;
+  line-height: 1;
+  color: var(--text-soft);
+  flex: none;
+}
+
+.crop-chips.is-good .crop-chip::before {
+  content: "○";
+}
+
+.crop-chips.is-avoid .crop-chip::before {
+  content: "◇";
+}
+
+/* 間をあけたい側は線種でも二重に符号化する（形だけだと小さくて見落とす）。
+   破線はこの意味だけに使う。 */
+.crop-chips.is-avoid a.crop-chip,
+.crop-chips.is-avoid .crop-chip {
+  border-style: dashed;
 }
 
 .crop-chip-name {
@@ -1235,7 +1316,6 @@ a.crop-chip:hover {
 
 .crop-back {
   margin: var(--sp-4) 0 0;
-  text-align: center;
   font-size: var(--fs-sm);
 }
 
@@ -1260,6 +1340,24 @@ a.crop-chip:hover {
 
 .crop-family-head h2 {
   margin: 0;
+}
+
+.crop-jump ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 0.75rem;
+  margin: var(--sp-3) 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--fs-sm);
+}
+
+.footer-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.25rem;
+  margin-bottom: var(--sp-4);
+  font-weight: 600;
 }
 
 .ref-more {

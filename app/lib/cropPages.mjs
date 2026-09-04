@@ -105,6 +105,32 @@ export function shortFamilyName(nameJa) {
   return nameJa.replace(/（.*?）/g, "");
 }
 
+/**
+ * 栽培メモ。マスタの note は「ナス科。連作を避け4年あける。ニラ・ネギ混植で…」の
+ * ように、あける年数の節と栽培のコツが1文字列に同居している。年数は見出しと
+ * fact カードが既に答えているので、ここで重ねると同じ画面に2つの年数が並ぶ
+ * （ニンニクは見出し1年・note「3年以上の連作で…」で実際に食い違う）。
+ * 年数を含む節と科名だけの節を落とし、残った栽培のコツだけを返す。
+ * 何も残らなければ空文字＝その行は出さない。
+ * @param {string | undefined} note
+ * @param {string} familyJa
+ */
+export function growingNote(note, familyJa) {
+  if (!note) return "";
+  return note
+    .split("。")
+    .map((x) => x.trim())
+    .filter(
+      (x) =>
+        x.length > 0 &&
+        !/\d+\s*(?:〜\s*\d+)?\s*年/.test(x) && // 年数の節（見出しと重複・矛盾しうる）
+        x !== familyJa && // 「ナス科」だけの節（eyebrow と重複）
+        x !== familyJa.replace(/（.*?）/g, ""),
+    )
+    .map((x) => `${x}。`)
+    .join("");
+}
+
 /** マスタに載っている野菜名なら slug を返す（内部リンクにできるかの判定）。 */
 function slugOfName(name) {
   return CROPS.find((c) => c.nameJa === name)?.id;
@@ -252,7 +278,7 @@ export function cropPage(slug) {
     rotationYears: crop.rotationYears,
     tier,
     yearsLabel,
-    note: crop.note,
+    note: growingNote(crop.note, crop.familyJa),
     sowLabel: sow,
     harvestLabel: harvest,
     sameFamily,
@@ -284,13 +310,29 @@ export function cropPage(slug) {
  * トップの早見表と /yasai/ の索引が同じデータで違う順に並ぶ。
  */
 export function cropIndex() {
-  return familyReference().map((f) => ({
+  return familyReference().map((f) => {
+    const members = CROPS.filter((c) => c.familyKey === f.key);
+    const years = members.map((c) => c.rotationYears);
+    const min = Math.min(...years);
+    const max = Math.max(...years);
+    return {
     key: f.key,
     nameJa: f.nameJa,
     rotationYears: f.rotationYears,
-    tier: f.tier,
-    yearsLabel: rotationYearsLabel(f.rotationYears),
-    crops: CROPS.filter((c) => c.familyKey === f.key).map((c) => ({
+    tier: rotationTier(max), // 見出しの重さはその科で最も長い野菜に合わせる
+    // 科の代表値ではなく、そのブロックに並ぶ野菜の実際の範囲を出す。
+    // 代表値だけを出すと「キク科 2年」の下に「ゴボウ 5年」が並び、
+    // 見出ししか読まない人がその科を実際より軽く受け取る。
+    // 0 は「年数」ではなく状態なので、範囲の下端が 0 のときは幅で書かず上限で言う。
+    yearsLabel:
+      min === max
+        ? rotationYearsLabel(max)
+        : min === 0
+          ? `最長${max}年`
+          : `${min}〜${max}年`,
+    memberMinYears: min,
+    memberMaxYears: max,
+    crops: members.map((c) => ({
       name: c.nameJa,
       slug: c.id,
       rotationYears: c.rotationYears,
@@ -298,7 +340,22 @@ export function cropIndex() {
       // 一覧でも作物の値を出さないと、科の見出しと中身が食い違って見える。
       yearsLabel: rotationYearsLabel(c.rotationYears),
     })),
-  }));
+    };
+  });
+}
+
+/**
+ * 「名前から探す」用の平坦な一覧。索引のリード文は名前から引けると約束しているのに、
+ * 科ごとのブロックしか無いと、その野菜の科を知らない人は全件を目で走査するしかない。
+ * 並びは日本語の読み順（Intl の ja 照合）に任せる。
+ */
+export function cropsByName() {
+  return CROPS.map((c) => ({
+    name: c.nameJa,
+    slug: c.id,
+    familyJa: shortFamilyName(c.familyJa),
+    yearsLabel: rotationYearsLabel(c.rotationYears),
+  })).sort((a, b) => a.name.localeCompare(b.name, "ja"));
 }
 
 /** 野菜ページの構造化データ。画面に出している事実だけを渡す。 */

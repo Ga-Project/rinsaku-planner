@@ -83,14 +83,24 @@ function Fact({
   );
 }
 
-/** 野菜名の並び。マスタにある野菜だけリンクにする（花・ハーブ類はテキストのまま）。 */
+/**
+ * 野菜名の並び。マスタにある野菜だけリンクにする（花・ハーブ類はテキストのまま）。
+ *
+ * mark は「勧めている並び」と「間をあけたい並び」を、チップ単体を見ただけで
+ * 区別するための形の符号。1ページに4つの並びがあり、うち2つは避ける側なので、
+ * 見出しから離れて読み始めた人には局所的な手がかりが要る。
+ * 形は節見出しの ○ / ◇ と同じ語彙にそろえ、色には意味を持たせない。
+ * 記号は装飾なので読み上げには載せない（意味は見出しと aria-labelledby が担保）。
+ */
 function CropChips({
   items,
+  mark,
 }: {
   items: { name: string; slug?: string; yearsLabel?: string }[];
+  mark: "good" | "avoid";
 }) {
   return (
-    <ul className="crop-chips">
+    <ul className={`crop-chips is-${mark}`}>
       {items.map((c) => (
         <li key={c.name}>
           {c.slug ? (
@@ -173,10 +183,12 @@ export default function CropDetailPage({ params }: Params) {
           <section className="crop-lead">
             <div className="container container-narrow">
               <span className="eyebrow">{page.familyJa}</span>
+              {/* 強調は 59 ページで不変の「の連作」ではなく、そのページ固有の
+                  野菜名に置く（トップの h1 と同じで、意味のある側を光らせる）。 */}
               <h1 style={{ wordBreak: "keep-all" }}>
-                {page.name}
+                <span className="accent-text">{page.name}</span>
                 <wbr />
-                <span className="accent-text">の連作</span>
+                の連作
               </h1>
               <p className="ref-lead">{page.rotationLine}</p>
 
@@ -203,7 +215,12 @@ export default function CropDetailPage({ params }: Params) {
                 />
               </dl>
 
-              {page.note ? <p className="crop-note">{page.note}</p> : null}
+              {page.note ? (
+                <p className="crop-note">
+                  <span className="crop-note-label">栽培メモ</span>
+                  {page.note}
+                </p>
+              ) : null}
             </div>
           </section>
 
@@ -214,7 +231,7 @@ export default function CropDetailPage({ params }: Params) {
               <Heading id="same-h">{page.headingSameFamily}</Heading>
               <p className="ref-lead">{page.leadSameFamily}</p>
               {page.sameFamily.length > 0 ? (
-                <CropChips items={page.sameFamily} />
+                <CropChips items={page.sameFamily} mark="avoid" />
               ) : (
                 <p className="crop-empty">
                   {`この一覧に載っている${page.familyInline}の野菜は${page.name}だけです。`}
@@ -227,7 +244,7 @@ export default function CropDetailPage({ params }: Params) {
             <div className="container container-narrow">
               <Heading id="next-h">{page.headingFollowUps}</Heading>
               <p className="ref-lead">{page.leadFollowUps}</p>
-              <CropChips items={page.followUps} />
+              <CropChips items={page.followUps} mark="good" />
             </div>
           </section>
 
@@ -237,12 +254,12 @@ export default function CropDetailPage({ params }: Params) {
               <div className="crop-companions">
                 <div>
                   <h3 className="crop-sub is-good">相性がよいとされる</h3>
-                  <CropChips items={page.companionGood} />
+                  <CropChips items={page.companionGood} mark="good" />
                 </div>
                 {page.companionBad.length > 0 ? (
                   <div>
                     <h3 className="crop-sub is-bad">近くに植えないほうがよい</h3>
-                    <CropChips items={page.companionBad} />
+                    <CropChips items={page.companionBad} mark="avoid" />
                   </div>
                 ) : null}
               </div>

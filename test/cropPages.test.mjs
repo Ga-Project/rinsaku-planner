@@ -13,6 +13,7 @@ import {
   findCrop,
   cropPage,
   cropIndex,
+  cropsByName,
   cropUrl,
   cropIndexUrl,
   cropJsonLd,
@@ -302,5 +303,55 @@ test("構造化データは画面に出している事実だけを持つ", () =>
     );
     assert.equal(crumb.itemListElement[2].item, p.url);
     assert.equal(crumb.itemListElement[1].item, cropIndexUrl());
+  }
+});
+
+test("栽培メモは年数を持たない（見出しの答えと数字が競合しない）", () => {
+  // マスタの note は「連作を避け4年あける。ニラ・ネギ混植で…」のように
+  // あける年数と栽培のコツが同居している。年数を落とさずに出すと、
+  // 見出し・fact カードと同じ画面に別の年数が並ぶ（ニンニクは 1年 対 3年 で実際に食い違う）。
+  for (const p of pages) {
+    assert.ok(!/\d+\s*(?:〜\s*\d+)?\s*年/.test(p.note), `${p.name}: 栽培メモに年数が残っている -> ${p.note}`);
+    assert.ok(!p.note.includes("。。"), `${p.name}: 栽培メモの句点が壊れている`);
+  }
+  // 落としたあとも中身が残る野菜が実在する（全部空にしてしまっていない）
+  assert.ok(
+    pages.filter((p) => p.note.length > 0).length > 20,
+    "栽培メモがほとんど空になっている（落としすぎ）",
+  );
+});
+
+test("索引の科バッジは、そのブロックに並ぶ野菜の実際の範囲を出す", () => {
+  for (const f of cropIndex()) {
+    const years = f.crops.map((c) => c.rotationYears);
+    assert.equal(f.memberMinYears, Math.min(...years), `${f.nameJa}: 下限が違う`);
+    assert.equal(f.memberMaxYears, Math.max(...years), `${f.nameJa}: 上限が違う`);
+    // 見出しがブロック内の最も長い野菜より軽く見えてはいけない
+    for (const c of f.crops) {
+      assert.ok(
+        c.rotationYears <= f.memberMaxYears,
+        `${f.nameJa}: ${c.name} が見出しの上限を超えている`,
+      );
+    }
+  }
+  // 代表値と実際の上限がずれる科が実在する（この検査の意味が消えない）
+  assert.ok(
+    cropIndex().some((f) => f.memberMaxYears > f.rotationYears),
+    "科の代表値より重い野菜がいなくなった（検査の前提が崩れた）",
+  );
+});
+
+test("名前から探す一覧は全作物を読み順で並べる", () => {
+  const byName = cropsByName();
+  assert.equal(byName.length, CROPS.length);
+  assert.deepEqual(
+    [...byName].sort((a, b) => a.name.localeCompare(b.name, "ja")).map((c) => c.slug),
+    byName.map((c) => c.slug),
+    "読み順に並んでいない",
+  );
+  const known = new Set(cropSlugs());
+  for (const c of byName) {
+    assert.ok(known.has(c.slug), `存在しない行き先 ${c.slug}`);
+    assert.ok(!c.familyJa.includes("（"), `${c.name}: 科名に括弧が残っている`);
   }
 });
