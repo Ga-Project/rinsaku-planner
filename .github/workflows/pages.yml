@@ -81,6 +81,12 @@ jobs:
       - env:
           BASE_PATH: /rinsaku-planner
         run: pnpm build
+      # 書き出した out/ そのものを検査する。canonical / og:image / basePath /
+      # 404 の導線 / sitemap は「ビルドを通したあと」にしか現れない性質で、
+      # ユニットテストは1件も反応しない。ここで落ちれば公開に進まない。
+      - env:
+          BASE_PATH: /rinsaku-planner
+        run: node scripts/verify-export.mjs out /rinsaku-planner
       - uses: actions/upload-pages-artifact@v3
         with:
           path: out

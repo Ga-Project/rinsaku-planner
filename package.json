@@ -8,7 +8,8 @@
     "build": "next build",
     "lint": "next lint --max-warnings 0",
     "typecheck": "tsc --noEmit",
-    "test": "node --test"
+    "test": "node --test",
+    "verify:export": "node scripts/verify-export.mjs out"
   },
   "dependencies": {
     "next": "^14.2.0",

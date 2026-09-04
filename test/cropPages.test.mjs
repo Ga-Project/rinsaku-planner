@@ -8,6 +8,7 @@ import assert from "node:assert/strict";
 import { CROPS, FAMILIES } from "../app/lib/crops.mjs";
 import { rotationTier, rotationYearsLabel } from "../app/lib/reference.mjs";
 import {
+  CROP_SECTION,
   cropSlugs,
   findCrop,
   cropPage,
@@ -46,11 +47,11 @@ test("あける年数は作物マスタの値そのもので、段階も同じ�
 
 test("0年を『0年あける』と書かない", () => {
   for (const p of pages.filter((x) => x.tier === "none")) {
-    assert.ok(
-      !/0年/.test(p.rotationLine),
-      `${p.name}: 0年という表記が出ている`,
-    );
-    assert.match(p.rotationLine, /続けて植えても障害が出にくい/);
+    for (const t of [p.rotationLine, p.description, p.leadSameFamily, ...p.faq.map((q) => q.a)]) {
+      assert.ok(!/0年/.test(t), `${p.name}: 0年という表記が出ている`);
+    }
+    assert.match(p.rotationLine, /直後でも植えやすい/);
+    assert.equal(p.yearsLabel, "続けて植えやすい");
   }
 });
 
@@ -67,7 +68,10 @@ test("同じ科の一覧は自分を含まず、科が一致する作物を全�
   }
 });
 
-test("あとに植えやすい野菜は別の科で、それ自身が区画を長く縛らない", () => {
+// 「連作にあたらないか」「年数が判定と一致するか」という中身の性質は
+// cropPagesRotation.test.mjs が bedStatus() を実際に呼んで検査する。
+// ここで見るのは構造（別の科・科が重複しない・実在する）だけに絞る。
+test("あとに植えやすい野菜は別の科で、科が重複しない", () => {
   for (const p of pages) {
     assert.ok(p.followUps.length > 0, `${p.name}: 候補が空`);
     const seen = new Set();
@@ -75,11 +79,25 @@ test("あとに植えやすい野菜は別の科で、それ自身が区画を�
       const crop = findCrop(f.slug);
       assert.ok(crop, `${f.slug} がマスタに無い`);
       assert.notEqual(crop.familyKey, p.familyKey, `${p.name}: 同じ科を勧めている`);
-      assert.ok(crop.rotationYears <= 1, `${p.name}: ${f.name} は縛りが長い`);
       assert.ok(!seen.has(crop.familyKey), `${p.name}: 科が重複している`);
       seen.add(crop.familyKey);
     }
   }
+});
+
+test("同じ科のチップは各野菜自身の年数を持つ（このページの年数で塗り潰さない）", () => {
+  for (const p of pages) {
+    for (const c of p.sameFamily) {
+      const crop = findCrop(c.slug);
+      assert.equal(c.rotationYears, crop.rotationYears, `${p.name}: ${c.name} の年数が違う`);
+      assert.equal(c.yearsLabel, rotationYearsLabel(crop.rotationYears));
+    }
+  }
+  // 科の中で年数がばらける作物が実在することを固定する（この検査の意味が消えない）
+  assert.ok(
+    pages.some((p) => p.sameFamily.some((c) => c.rotationYears !== p.rotationYears)),
+    "同じ科で年数がばらける作物が無くなった（検査の前提が崩れた）",
+  );
 });
 
 test("内部リンクの行き先は必ず実在する作物", () => {
@@ -134,19 +152,47 @@ test("文中の科名は括弧が二重にならない", () => {
     for (const f of p.followUps) {
       assert.ok(!f.familyJa.includes("（"), `${f.name}: 科名に括弧が残っている`);
     }
-    for (const q of p.faq) {
-      assert.ok(!/（[^）]*（/.test(q.a), `${p.name}: FAQ の括弧が二重`);
+    // 画面に出る文字列は全て検査対象にする。description は meta にそのまま出るので
+    // ここを外すと検索結果のスニペットだけ壊れる（実際にそうなっていた）。
+    const texts = [
+      p.rotationLine,
+      p.description,
+      p.title,
+      p.headingSameFamily,
+      p.headingFollowUps,
+      p.headingCompanions,
+      p.headingFaq,
+      p.leadSameFamily,
+      p.leadFollowUps,
+      ...p.faq.map((q) => q.a),
+      ...p.faq.map((q) => q.q),
+    ];
+    for (const t of texts) {
+      assert.ok(!/（[^）]*（/.test(t), `${p.name}: 括弧が二重になっている -> ${t.slice(0, 60)}`);
     }
   }
 });
 
-test("FAQ は野菜名を含み、答えが空でない", () => {
+test("URL の区画名は yasai で固定（実ルートのディレクトリ名と一致させる）", () => {
+  // 値を変えても app/yasai/ のディレクトリ名は追従しないため、
+  // canonical と sitemap だけが動いて実ルートが取り残される。
+  assert.equal(CROP_SECTION, "yasai");
+});
+
+test("FAQ は質問に野菜名を含み、答えがその質問に必要な事実を持つ", () => {
   for (const p of pages) {
     assert.ok(p.faq.length >= 2, `${p.name}: FAQ が少ない`);
     for (const q of p.faq) {
       assert.ok(q.q.includes(p.name), `${p.name}: 質問に野菜名が無い`);
-      assert.ok(q.a.length > 30, `${p.name}: 答えが短すぎる`);
     }
+    // 「何年あければ」の答えは科の名前を必ず含む（連作は科の単位で起きるため）
+    assert.ok(p.faq[0].a.includes(p.familyInline), `${p.name}: 答えに科の名前が無い`);
+    // 「あとに何を植えるか」の答えは、実在する候補の名前を必ず挙げる
+    const next = p.faq[1].a;
+    assert.ok(
+      p.followUps.slice(0, 4).every((f) => next.includes(f.name)),
+      `${p.name}: あとに植える候補の名前が答えに入っていない`,
+    );
   }
 });
 
@@ -160,14 +206,14 @@ test("列挙が空でも文が壊れない（同じ科に自分しかいない�
     if (p.sameFamily.length === 0) {
       // 仲間がいないので、名前を並べる言い回しを使ってはいけない
       assert.ok(
-        !first.includes("なども"),
+        !first.includes("など"),
         `${p.name}: 挙げる相手がいないのに列挙の言い回しが残っている`,
       );
     } else if (p.tier !== "none") {
       // 使うなら必ず実在する仲間の名前が直前に入っていること
       const names = p.sameFamily.slice(0, 3).map((c) => c.name);
       assert.ok(
-        first.includes(`${names.join("・")}なども`),
+        first.includes(`${names.join("・")}など`),
         `${p.name}: 列挙の中身が入っていない`,
       );
     }

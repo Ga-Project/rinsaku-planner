@@ -10,6 +10,7 @@ import { IconSprout } from "../components/icons";
 import { cropIndex, cropIndexUrl, cropSlugs } from "../lib/cropPages.mjs";
 import { SITE_NAME } from "../lib/reference.mjs";
 import { SITE_URL } from "../lib/site.mjs";
+import { OG_IMAGE } from "../lib/og.mjs";
 
 const TITLE = "野菜別 連作ガイド｜あける年数の一覧";
 const DESCRIPTION =
@@ -19,6 +20,8 @@ export const metadata: Metadata = {
   title: TITLE,
   description: DESCRIPTION,
   alternates: { canonical: cropIndexUrl() },
+  // openGraph / twitter は layout のものと deep-merge されないため、画像も含めて
+  // ここで全部書き直す（落とすとカードがトップのものになる）。
   openGraph: {
     title: TITLE,
     description: DESCRIPTION,
@@ -26,6 +29,13 @@ export const metadata: Metadata = {
     type: "website",
     locale: "ja_JP",
     siteName: SITE_NAME,
+    images: [OG_IMAGE],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: TITLE,
+    description: DESCRIPTION,
+    images: [OG_IMAGE.url],
   },
 };
 
@@ -108,7 +118,7 @@ export default function CropIndexPage() {
                 {/* 作物ごとのあける年数を必ず併記する。科の代表値とずれる野菜
                     （ジャガイモ3年 / ナス科4年）があり、見出しの年数だけだと
                     一覧と中身が矛盾して見えるため。 */}
-                <ul className="crop-chips is-index">
+                <ul className="crop-chips">
                   {f.crops.map((c) => (
                     <li key={c.slug}>
                       <Link className="crop-chip" href={`/yasai/${c.slug}/`}>

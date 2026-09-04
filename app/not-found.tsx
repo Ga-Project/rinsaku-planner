@@ -4,6 +4,8 @@
 // page.tsx と同じランドマーク（header / main / footer）・h1 は1つ・skip-link を持つ。
 
 import type { Metadata } from "next";
+import Link from "next/link";
+import { SiteHeader } from "./components/SiteChrome";
 
 export const metadata: Metadata = {
   title: "ページが見つかりません — 畑めぐり",
@@ -18,16 +20,11 @@ export default function NotFound() {
         本文へスキップ
       </a>
 
-      <header className="site-header">
-        <div className="container">
-          <a className="brand" href="/">
-            <span className="brand-mark" aria-hidden="true">
-              畑
-            </span>
-            <span>畑めぐり</span>
-          </a>
-        </div>
-      </header>
+      {/* 内部リンクは next/link 経由でしか basePath が付かない。素の href="/" は
+          サブパス配信で配信オリジンのルート（＝製品の外）へ飛ぶ。
+          static export では存在しない URL の受け皿はこの 404.html だけなので、
+          ここのリンクが外に出ていると打ち間違えた利用者を必ず取り逃がす。 */}
+      <SiteHeader />
 
       <main id="main" tabIndex={-1} style={{ outline: "none" }}>
         <section className="hero">
@@ -41,9 +38,9 @@ export default function NotFound() {
               が誤っている可能性があります。
             </p>
             <div className="hero-actions">
-              <a className="btn btn-primary" href="/">
+              <Link className="btn btn-primary" href="/">
                 ホームへ戻る
-              </a>
+              </Link>
             </div>
           </div>
         </section>

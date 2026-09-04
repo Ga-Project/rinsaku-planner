@@ -15,6 +15,7 @@ import {
   cropBreadcrumbJsonLd,
 } from "../../lib/cropPages.mjs";
 import { faqJsonLd, SITE_NAME } from "../../lib/reference.mjs";
+import { OG_IMAGE } from "../../lib/og.mjs";
 
 // static export では全 slug をビルド時に確定させる。マスタに無い slug は 404。
 export function generateStaticParams() {
@@ -31,6 +32,9 @@ export function generateMetadata({ params }: Params): Metadata {
     title: page.title,
     description: page.description,
     alternates: { canonical: page.url },
+    // openGraph / twitter は layout のものと deep-merge されない。ここで定義した
+    // 時点で layout 側の images は丸ごと落ちるので、画像も含めて全部書き直す
+    // （落とすと59ページ全部がトップと同じカードで共有される）。
     openGraph: {
       title: page.title,
       description: page.description,
@@ -38,25 +42,43 @@ export function generateMetadata({ params }: Params): Metadata {
       type: "article",
       locale: "ja_JP",
       siteName: SITE_NAME,
+      images: [OG_IMAGE],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: page.title,
+      description: page.description,
+      images: [OG_IMAGE.url],
     },
   };
 }
 
-/** 事実の1行（科・あける年数・時期）。値が無い項目は行ごと出さない。 */
+/**
+ * 事実の1行（科・あける年数・時期）。値が空の項目は行ごと出さない。
+ * 値は必ず文字列で受け取る: JSX を受けると常に truthy になってガードが死ぬ
+ * （空になり得るのは時期の2行だけなので、そこでガードが効かないと意味が無い）。
+ */
 function Fact({
   label,
   value,
-  children,
+  icon,
+  className,
 }: {
   label: string;
-  value?: string;
-  children?: React.ReactNode;
+  value: string;
+  icon?: React.ReactNode;
+  className?: string;
 }) {
-  if (!value && !children) return null;
+  if (!value) return null;
   return (
     <div className="crop-fact">
       <dt>{label}</dt>
-      <dd>{children ?? value}</dd>
+      <dd>
+        <span className={className}>
+          {icon}
+          {value}
+        </span>
+      </dd>
     </div>
   );
 }
@@ -64,13 +86,11 @@ function Fact({
 /** 野菜名の並び。マスタにある野菜だけリンクにする（花・ハーブ類はテキストのまま）。 */
 function CropChips({
   items,
-  tone,
 }: {
   items: { name: string; slug?: string; yearsLabel?: string }[];
-  tone: "same" | "next" | "good" | "bad";
 }) {
   return (
-    <ul className={`crop-chips is-${tone}`}>
+    <ul className="crop-chips">
       {items.map((c) => (
         <li key={c.name}>
           {c.slug ? (
@@ -163,23 +183,24 @@ export default function CropDetailPage({ params }: Params) {
               {/* 事実は表ではなく定義リスト。狭い画面で崩れず、読み上げでも対になる。 */}
               <dl className="crop-facts">
                 <Fact label="科" value={page.familyJa} />
-                <Fact label="あける年数の目安">
-                  <span className={`ref-years is-${page.tier}`}>
-                    {page.yearsLabel}
-                  </span>
-                </Fact>
-                <Fact label="種まき・植え付け">
-                  <span className="crop-months">
-                    <IconSeedling aria-hidden="true" />
-                    {page.sowLabel}
-                  </span>
-                </Fact>
-                <Fact label="収穫">
-                  <span className="crop-months">
-                    <IconClock aria-hidden="true" />
-                    {page.harvestLabel}
-                  </span>
-                </Fact>
+                {/* 年数の向きを取り違えないよう、ラベルで「植えるまでに」と言い切る。 */}
+                <Fact
+                  label="植えるまでにあけたい年数"
+                  value={page.yearsLabel}
+                  className={`ref-years is-${page.tier}`}
+                />
+                <Fact
+                  label="種まき・植え付け"
+                  value={page.sowLabel}
+                  className="crop-months"
+                  icon={<IconSeedling aria-hidden="true" />}
+                />
+                <Fact
+                  label="収穫"
+                  value={page.harvestLabel}
+                  className="crop-months"
+                  icon={<IconClock aria-hidden="true" />}
+                />
               </dl>
 
               {page.note ? <p className="crop-note">{page.note}</p> : null}
@@ -190,19 +211,13 @@ export default function CropDetailPage({ params }: Params) {
 
           <section className="crop-section" aria-labelledby="same-h">
             <div className="container container-narrow">
-              <Heading id="same-h">
-                {`${page.name}のあとに避ける野菜（同じ${page.familyJa}）`}
-              </Heading>
-              <p className="ref-lead">
-                {page.tier === "none"
-                  ? `${page.familyJa}は続けて植えやすいグループですが、土の養分は使われます。同じ${page.familyJa}にはこれらがあります。`
-                  : `連作障害は野菜の名前ではなく科の単位で起きます。${page.name}を育てた区画では、名前が違ってもこれらの野菜が同じ${page.yearsLabel}のあいだ連作にあたります。`}
-              </p>
+              <Heading id="same-h">{page.headingSameFamily}</Heading>
+              <p className="ref-lead">{page.leadSameFamily}</p>
               {page.sameFamily.length > 0 ? (
-                <CropChips items={page.sameFamily} tone="same" />
+                <CropChips items={page.sameFamily} />
               ) : (
                 <p className="crop-empty">
-                  この科でマスタに載っているのは{page.name}だけです。
+                  {`この一覧に載っている${page.familyInline}の野菜は${page.name}だけです。`}
                 </p>
               )}
             </div>
@@ -210,27 +225,24 @@ export default function CropDetailPage({ params }: Params) {
 
           <section className="crop-section" aria-labelledby="next-h">
             <div className="container container-narrow">
-              <Heading id="next-h">{`${page.name}のあとに植えやすい野菜`}</Heading>
-              <p className="ref-lead">
-                {page.familyJa}
-                以外の科で、それ自身も区画を長く縛らない野菜です。あいだにはさむ「休ませ役」として使えます。
-              </p>
-              <CropChips items={page.followUps} tone="next" />
+              <Heading id="next-h">{page.headingFollowUps}</Heading>
+              <p className="ref-lead">{page.leadFollowUps}</p>
+              <CropChips items={page.followUps} />
             </div>
           </section>
 
           <section className="crop-section" aria-labelledby="comp-h">
             <div className="container container-narrow">
-              <Heading id="comp-h">{`${page.name}と一緒に植えるなら`}</Heading>
+              <Heading id="comp-h">{page.headingCompanions}</Heading>
               <div className="crop-companions">
                 <div>
                   <h3 className="crop-sub is-good">相性がよいとされる</h3>
-                  <CropChips items={page.companionGood} tone="good" />
+                  <CropChips items={page.companionGood} />
                 </div>
                 {page.companionBad.length > 0 ? (
                   <div>
                     <h3 className="crop-sub is-bad">近くに植えないほうがよい</h3>
-                    <CropChips items={page.companionBad} tone="bad" />
+                    <CropChips items={page.companionBad} />
                   </div>
                 ) : null}
               </div>
@@ -242,7 +254,7 @@ export default function CropDetailPage({ params }: Params) {
 
           <section className="reference-faq no-print" aria-labelledby="faq-h">
             <div className="container container-narrow">
-              <Heading id="faq-h">{`${page.name}の連作についてよくある質問`}</Heading>
+              <Heading id="faq-h">{page.headingFaq}</Heading>
               <div className="ref-faq">
                 {page.faq.map((item: { q: string; a: string }, i: number) => (
                   <details key={item.q} className="ref-faq-item" open={i === 0}>

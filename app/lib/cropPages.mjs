@@ -6,6 +6,15 @@
 //   どこにも無い。この層は crops.mjs から野菜1件ぶんの読み物を導出し、
 //   /yasai/<id>/ として静的HTMLに焼き込めるようにする。
 //
+// ■ 年数がどちら向きの数かを間違えない（この層で最も壊しやすいところ）
+//   crops.mjs の rotationYears は「その野菜を植えるとき、同じ科を最後に作ってから
+//   何年あいている必要があるか」＝ **さかのぼって見る要件**。
+//   rotation.mjs の bedStatus() は「いま植える作物」の rotationYears を requiredYears に
+//   採り、それより前の同科履歴と比べる（gap < req で ng、gap === req で caution）。
+//   したがって「トマトを植えたらこの区画は4年ふさがる」は誤り。トマトのあとに
+//   ジャガイモ（自身3年）を植えるなら要るのは3年で、野菜ごとに違う。
+//   本文はすべてこの向きで書く。区画が縛られる年数として書かない。
+//
 // ■ 手で書き写さない
 //   年数・科・時期・相性はすべて crops.mjs から引く。文章もテンプレートに値を差し込む
 //   形で組み立てるので、マスタを直せば 59 ページぶんの本文が同時に追従する。
@@ -17,7 +26,12 @@
 //   59 ページが互いに繋がることで、1枚もののサイトでは作れない回遊と被リンクができる。
 
 import { CROPS, FAMILIES } from "./crops.mjs";
-import { rotationTier, rotationYearsLabel, SITE_NAME } from "./reference.mjs";
+import {
+  familyReference,
+  rotationTier,
+  rotationYearsLabel,
+  SITE_NAME,
+} from "./reference.mjs";
 import { SITE_URL } from "./site.mjs";
 
 /** 野菜ページのURLの根（末尾スラッシュなし）。ルーティングと sitemap の唯一の出典。 */
@@ -110,9 +124,10 @@ function familyOf(key) {
 
 /**
  * 「この野菜のあとに植えやすい野菜」。連作は科の単位で起きるので別の科であることが
- * 前提、そのうえでその野菜自身のあける年数が短い（0〜1年）ものを勧める。
- * ここで見るのは科の代表値ではなく作物ごとの rotationYears＝区画が次に縛られる年数で、
- * プランナー本体（rotation.mjs）が必要年数として使う値と同じものを使う。
+ * 第一の条件。別の科であればこの区画の履歴は連作にあたらないので、そこは全て等しい。
+ * そのうえで rotationYears が短い（0〜1年）ものを選ぶ。これは「その野菜をまた植える
+ * までに要るあき年数」＝ rotation.mjs が requiredYears に採る値そのもので、短いほど
+ * 同じ仲間へ早く戻せる。区画が縛られる年数ではないので、そう書かない。
  * あける年数の小さい順・マスタ順で安定させ、科が偏らないよう1科1件までにする。
  */
 function followUps(crop) {
@@ -144,12 +159,19 @@ export function cropPage(slug) {
   const crop = findCrop(slug);
   if (!crop) return null;
 
-  const family = familyOf(crop.familyKey);
+  familyOf(crop.familyKey); // 科がマスタに無ければここで落とす（黙って既定値にしない）
   const tier = rotationTier(crop.rotationYears);
   const yearsLabel = rotationYearsLabel(crop.rotationYears);
+  // 同じ科の野菜。必要なあき年数は「次に植える野菜」ごとに違うので、
+  // 各作物の値を必ず持たせる（この野菜の年数で塗り潰すと助言が誤りになる）。
   const sameFamily = CROPS.filter(
     (c) => c.familyKey === crop.familyKey && c.id !== crop.id,
-  ).map((c) => ({ name: c.nameJa, slug: c.id }));
+  ).map((c) => ({
+    name: c.nameJa,
+    slug: c.id,
+    rotationYears: c.rotationYears,
+    yearsLabel: rotationYearsLabel(c.rotationYears),
+  }));
 
   const sow = monthRangeLabel(crop.sowMonths);
   const harvest = monthRangeLabel(crop.harvestMonths);
@@ -158,15 +180,19 @@ export function cropPage(slug) {
   const next = followUps(crop);
 
   // 連作の一文。tier ごとに言い方を変える（0年を「0年あける」と書かない）。
+  // 文中に差し込む科名は必ず短縮名を通す。素の familyJa は「ヒガンバナ科（ネギ類）」の
+  // ように補足の括弧を持つため、括弧の中に入れると二重になって読めなくなる
+  // （description は meta にそのまま出るので検索結果のスニペットが壊れる）。
+  const famInline = shortFamilyName(crop.familyJa);
   const rotationLine =
     tier === "none"
-      ? `${crop.nameJa}（${crop.familyJa}）は、同じ場所に続けて植えても障害が出にくい野菜です。`
-      : `${crop.nameJa}（${crop.familyJa}）は、同じ場所に${crop.familyJa}を再び植えるまで${crop.rotationYears}年あけるのが目安です。`;
+      ? `${crop.nameJa}（${famInline}）は、同じ場所で${famInline}を作った直後でも植えやすい野菜です。`
+      : `${crop.nameJa}（${famInline}）を植えるには、その場所で${famInline}を最後に作ってから${crop.rotationYears}年あいているのが目安です。`;
 
   const description =
     `${rotationLine}` +
-    `連作になる同じ科の野菜、あとに植えやすい野菜、相性のよい組み合わせ、` +
-    `種まきと収穫の時期をまとめました。登録不要で区画の作付け計画もそのまま作れます。`;
+    `連作になる同じ科の野菜とそれぞれに要るあき年数、あとに植えやすい野菜、` +
+    `相性のよい組み合わせ、種まきと収穫の時期をまとめました。登録不要で区画の作付け計画もそのまま作れます。`;
 
   const faq = [
     {
@@ -176,24 +202,32 @@ export function cropPage(slug) {
           : `${crop.nameJa}は何年あければよいですか？`,
       a:
         tier === "none"
-          ? `${crop.nameJa}が属する${crop.familyJa}は連作障害が出にくいグループで、続けて植えやすい野菜です。ただし土の養分は使われるので、堆肥や元肥での土づくりは通常どおり必要です。`
-          : `${crop.nameJa}が属する${crop.familyJa}は、同じ場所に再び植えるまで${crop.rotationYears}年あけるのが目安です。連作障害は野菜の名前ではなく科の単位で起きるため、` +
+          ? `${crop.nameJa}は連作障害が出にくく、${famInline}を作った直後の場所にも植えやすい野菜です。ただし土の養分は使われるので、堆肥や元肥での土づくりは通常どおり必要です。`
+          : `${crop.nameJa}を植えるには、その場所で${famInline}を最後に作ってから${crop.rotationYears}年あいているのが目安です。連作障害は野菜の名前ではなく科の単位で起きるため、` +
             // 同じ科に自分しかいない作物（オクラ・イチゴ・サトイモ）がある。
-            // 列挙を無条件に差し込むと「区画ではなども同じ2年のあいだ避けます」という
-            // 空の列挙が残った文になるので、仲間がいるときだけ名前を挙げる。
+            // 列挙を無条件に差し込むと空の列挙が残った文になるので、仲間がいるときだけ挙げる。
             (sameFamily.length > 0
-              ? `${crop.nameJa}を作った区画では${sameFamily
+              ? `${sameFamily
                   .slice(0, 3)
                   .map((c) => c.name)
-                  .join("・")}なども同じ${crop.rotationYears}年のあいだ避けます。`
-              : `${crop.familyJa}の野菜であれば${crop.nameJa}以外でも、同じ${crop.rotationYears}年のあいだは同じ区画を避けます。`),
+                  .join("・")}など${famInline}の野菜を作った場所も、同じように${crop.rotationYears}年をみます。`
+              : `${famInline}の野菜を作った場所であれば、${crop.nameJa}以外の記録でも同じように${crop.rotationYears}年をみます。`),
     },
     {
       q: `${crop.nameJa}のあとには何を植えればよいですか？`,
-      a: `${shortFamilyName(crop.familyJa)}以外の科を選びます。${next
-        .slice(0, 4)
-        .map((c) => `${c.name}（${c.familyJa}）`)
-        .join("・")}のように、それ自身は区画を長く縛らない野菜は、あいだにはさむ「休ませ役」として使いやすい組み合わせです。`,
+      a:
+        `${famInline}以外の科を選べば、${crop.nameJa}の記録は連作にあたりません。${next
+          .slice(0, 4)
+          .map((c) => `${c.name}（${c.familyJa}）`)
+          .join(
+            "・",
+          )}などは、それ自身をまた植えるまでのあき年数も短いので、あいだにはさむ「休ませ役」にしやすい野菜です。` +
+        (sameFamily.length > 0
+          ? `同じ${famInline}に戻す場合、必要なあき年数は次に植える野菜ごとに違います（${sameFamily
+              .slice(0, 3)
+              .map((c) => `${c.name}なら${c.yearsLabel}`)
+              .join("、")}）。`
+          : ""),
     },
   ];
   if (good.length > 0) {
@@ -212,8 +246,9 @@ export function cropPage(slug) {
     slug: crop.id,
     name: crop.nameJa,
     familyJa: crop.familyJa,
+    // 文中・括弧内に差し込む用の短縮名。見出しや表など単独で置く場所は familyJa を使う。
+    familyInline: famInline,
     familyKey: crop.familyKey,
-    familyRotationYears: family.rotationYears,
     rotationYears: crop.rotationYears,
     tier,
     yearsLabel,
@@ -225,6 +260,17 @@ export function cropPage(slug) {
     companionBad: bad,
     followUps: next,
     rotationLine,
+    // 見出しも lib 側で組み立てる。page.tsx で `（同じ${familyJa}）` のように
+    // 括弧を足すと、短縮名を通す規則が画面側だけすり抜ける。
+    headingSameFamily: `${crop.nameJa}のあとに間をあけたい野菜（同じ${famInline}）`,
+    headingFollowUps: `${crop.nameJa}のあとに植えやすい野菜`,
+    leadSameFamily:
+      tier === "none"
+        ? `${famInline}は続けて植えやすいグループですが、土の養分は使われます。同じ${famInline}にはこれらがあります。必要なあき年数は野菜ごとに違います。`
+        : `連作障害は野菜の名前ではなく科の単位で起きます。${crop.nameJa}を作った場所に次の${famInline}を植えるとき、あけたい年数は${sameFamily.length > 0 ? "その野菜ごとに違います" : `${crop.nameJa}自身の${crop.rotationYears}年です`}。`,
+    leadFollowUps: `${famInline}以外の科なら、${crop.nameJa}の記録は連作にあたりません。なかでも次の野菜は、それ自身をまた植えるまでのあき年数が短いものです。`,
+    headingCompanions: `${crop.nameJa}と一緒に植えるなら`,
+    headingFaq: `${crop.nameJa}の連作についてよくある質問`,
     title: `${crop.nameJa}の連作｜あける年数と、あとに植える野菜`,
     description,
     url: cropUrl(crop.id),
@@ -233,15 +279,16 @@ export function cropPage(slug) {
 }
 
 /**
- * 索引。科ごとにまとめ、あける年数の重い順に並べる（早見表と同じ並び）。
- * 年数が同じときはマスタの並び順を保つ＝安定ソート。
+ * 索引。並び（作物を持つ科だけ・あける年数の降順・同点はマスタ順）は早見表の
+ * familyReference() をそのまま採る。同じ規則を書き写すと、片方だけ直したときに
+ * トップの早見表と /yasai/ の索引が同じデータで違う順に並ぶ。
  */
 export function cropIndex() {
-  return FAMILIES.map((f, i) => ({
+  return familyReference().map((f) => ({
     key: f.key,
     nameJa: f.nameJa,
     rotationYears: f.rotationYears,
-    tier: rotationTier(f.rotationYears),
+    tier: f.tier,
     yearsLabel: rotationYearsLabel(f.rotationYears),
     crops: CROPS.filter((c) => c.familyKey === f.key).map((c) => ({
       name: c.nameJa,
@@ -251,11 +298,7 @@ export function cropIndex() {
       // 一覧でも作物の値を出さないと、科の見出しと中身が食い違って見える。
       yearsLabel: rotationYearsLabel(c.rotationYears),
     })),
-    _order: i,
-  }))
-    .filter((f) => f.crops.length > 0)
-    .sort((a, b) => b.rotationYears - a.rotationYears || a._order - b._order)
-    .map(({ _order, ...rest }) => rest);
+  }));
 }
 
 /** 野菜ページの構造化データ。画面に出している事実だけを渡す。 */

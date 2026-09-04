@@ -8,6 +8,7 @@ import "./theme.css";
 import "./ui.css";
 import { SITE_URL } from "./lib/site.mjs";
 import { SITE_TITLE, SITE_DESCRIPTION, SITE_NAME } from "./lib/reference.mjs";
+import { OG_IMAGE } from "./lib/og.mjs";
 
 // ここに置くのは「どのページでも同じ」メタデータだけ。canonical と構造化データは
 // ページ固有なので page.tsx が持つ（layout に置くと 404 ページにも出てしまう）。
@@ -39,20 +40,13 @@ export const metadata: Metadata = {
     locale: "ja_JP",
     siteName: SITE_NAME,
     url: SITE_URL,
-    images: [
-      {
-        url: "og.png", // metadataBase 起点で絶対URLに解決される
-        width: 1200,
-        height: 630,
-        alt: "畑めぐり — 区画ごとに連作をひと目で判定する家庭菜園の輪作プランナー",
-      },
-    ],
+    images: [OG_IMAGE], // metadataBase 起点で絶対URLに解決される
   },
   twitter: {
     card: "summary_large_image",
     title: SITE_TITLE,
     description: SITE_DESCRIPTION,
-    images: ["og.png"],
+    images: [OG_IMAGE.url],
   },
 };
 
