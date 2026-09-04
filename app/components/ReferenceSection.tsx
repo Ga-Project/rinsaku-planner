@@ -4,11 +4,13 @@
 // プランナー本体はクライアントの島なので静的書き出しの HTML に中身が出ない。
 // この節はビルド時に HTML として焼き込まれ、プランナーを触る前の読み手にも、
 // クローラにも、連作データがそのまま読める状態になる。
+import Link from "next/link";
 import {
   familyReference,
   rotationYearsLabel,
   FAQ,
 } from "../lib/reference.mjs";
+import { cropSlugs } from "../lib/cropPages.mjs";
 import { IconSprout } from "./icons";
 
 /** 見出しのスプラウト印。この製品の全セクション見出しと同じ語彙に揃える。 */
@@ -100,6 +102,14 @@ export function ReferenceSection() {
 
           <p className="ref-note">
             年数を覚える必要はありません。畑めぐりに区画と作付けを記録しておくと、同じ科が近すぎる区画を色と印で知らせます。
+          </p>
+
+          {/* 野菜の名前から入りたい読み手の出口。科の表だけだと「トマトは何年？」に
+              一手で答えられない。 */}
+          <p className="ref-more">
+            <Link className="btn btn-secondary" href="/yasai/">
+              野菜別に見る（{cropSlugs().length}種）
+            </Link>
           </p>
         </div>
       </section>

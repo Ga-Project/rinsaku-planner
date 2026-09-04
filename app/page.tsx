@@ -2,7 +2,7 @@
 // ヒーローはサーバーコンポーネント、本体（PlannerApp）はクライアントの島。
 import type { Metadata } from "next";
 import { PlannerApp } from "./components/PlannerApp";
-import { IconLeafMark } from "./components/icons";
+import { SiteHeader, SiteFooter } from "./components/SiteChrome";
 import { ReferenceSection } from "./components/ReferenceSection";
 import { SITE_URL } from "./lib/site.mjs";
 import { faqJsonLd, appJsonLd } from "./lib/reference.mjs";
@@ -31,19 +31,13 @@ export default function Home() {
         本文へスキップ
       </a>
 
-      <header className="site-header no-print">
-        <div className="container">
-          <a className="brand" href="/">
-            <span className="brand-mark" aria-hidden="true">
-              畑
-            </span>
-            <span>畑めぐり</span>
-          </a>
+      <SiteHeader
+        action={
           <a className="btn btn-primary" href="#app">
             使ってみる
           </a>
-        </div>
-      </header>
+        }
+      />
 
       <main id="main" tabIndex={-1} style={{ outline: "none" }}>
         <section className="hero no-print">
@@ -145,17 +139,7 @@ export default function Home() {
         <ReferenceSection />
       </main>
 
-      <footer className="site-footer no-print">
-        <div className="container">
-          <p>
-            連作障害の年数や相性は一般的な目安です。地域・品種・土壌の状態によって変わります。最終的な作付けはご自身の環境に合わせてご判断ください。
-          </p>
-          <p>記録はこの端末の中だけに保存され、外部には送信されません。</p>
-          <p className="footer-leaf">
-            <IconLeafMark aria-hidden="true" />© 畑めぐり
-          </p>
-        </div>
-      </footer>
+      <SiteFooter />
     </>
   );
 }

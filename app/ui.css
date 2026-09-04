@@ -1030,3 +1030,238 @@ select:focus {
     color: #000;
   }
 }
+
+/* =========================================================================
+ * 野菜別 連作ガイド（/yasai/）— 索引と各野菜の読み物。
+ * 既存の .ref-* と同じ語彙（土のディバイダ・スプラウト印・年数チップ）を使い、
+ * プランナー本体と地続きに見せる。新しい色は足さず既存トークンだけで組む。
+ * ========================================================================= */
+
+.crumbs {
+  padding: var(--sp-4) 0 0;
+  font-size: var(--fs-xs);
+  color: var(--text-soft);
+}
+
+.crumbs ol {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* 区切りは装飾なので読み上げに載せない（::before は AT が読まない）。 */
+.crumbs li + li::before {
+  content: "/";
+  margin-right: 0.5rem;
+  color: var(--border-strong);
+}
+
+.crumbs a {
+  color: inherit;
+}
+
+.crumbs [aria-current="page"] {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.crop-lead {
+  padding: var(--sp-6) 0
+    var(--sp-5);
+}
+
+.crop-lead h1 {
+  margin: 0.25rem 0 0.75rem;
+  font-family: var(--font-display);
+  font-size: clamp(1.75rem, 5.5vw, 2.75rem);
+  line-height: 1.25;
+}
+
+/* ヒーローと同じ強調の語彙。.accent-text は .hero 配下でしか色が付かないので、
+   この見出しにも同じ規則を与える（付けないと span が無意味に残る）。 */
+.crop-lead h1 .accent-text {
+  color: var(--accent);
+}
+
+/* 事実の対（科・年数・時期）。4件が本文幅に1行で収まる下限を最小幅にする
+   （11rem だと3列で折り返して4件目だけが取り残される）。狭い画面では自然に積む。 */
+.crop-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: var(--sp-3);
+  margin: var(--sp-5) 0 0;
+  padding: 0;
+}
+
+.crop-fact {
+  padding: var(--sp-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.crop-fact dt {
+  margin: 0 0 0.35rem;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--text-soft);
+}
+
+.crop-fact dd {
+  margin: 0;
+  font-size: 1.0625rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.crop-months {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.crop-months svg {
+  width: 1.05em;
+  height: 1.05em;
+  color: var(--accent);
+  flex: none;
+}
+
+.crop-note {
+  margin: var(--sp-4) 0 0;
+  color: var(--text-soft);
+  font-size: var(--fs-sm);
+  line-height: 1.85;
+}
+
+.crop-section {
+  padding: var(--sp-5) 0;
+}
+
+.crop-section h2 {
+  margin: 0 0 0.5rem;
+}
+
+.crop-sub {
+  margin: 0 0 0.6rem;
+  font-size: var(--fs-sm);
+}
+
+/* 良し悪しは色だけで示さない。文言（見出しそのもの）と枠線の形で区別する。 */
+.crop-sub.is-good::before,
+.crop-sub.is-bad::before {
+  content: "";
+  display: inline-block;
+  width: 0.6rem;
+  height: 0.6rem;
+  margin-right: 0.45rem;
+  border: 2px solid currentColor;
+  vertical-align: baseline;
+}
+
+.crop-sub.is-good::before {
+  border-radius: 50%;
+}
+
+.crop-sub.is-bad::before {
+  border-radius: 2px;
+  transform: rotate(45deg);
+}
+
+.crop-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* 押せる面であることを示すのは境界線だけなので、非テキストコントラスト（1.4.11）を
+   満たす濃さが要る。--border-strong 単体は地に対して 1.4:1 しか出ず「押せる面」に
+   見えない（区画チップで同じ指摘を受けた箇所）。text-dim を混ぜて 3:1 を超えさせる。 */
+.crop-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.45rem;
+  min-height: 32px;
+  padding: 0.42rem 0.72rem;
+  border: 1.5px solid color-mix(in srgb, var(--text-dim) 78%, var(--border-strong));
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  color: var(--text);
+  font-size: var(--fs-sm);
+  line-height: 1.4;
+  text-decoration: none;
+}
+
+a.crop-chip:hover {
+  border-color: var(--accent);
+  background: var(--accent-tint);
+}
+
+/* マスタに無い相手（花・ハーブ）はリンクにならないので、押せる見た目にしない。 */
+.crop-chip.is-plain {
+  border-style: dashed;
+  color: var(--text-soft);
+}
+
+.crop-chip-name {
+  font-weight: 600;
+}
+
+.crop-chip-sub {
+  font-size: var(--fs-xs);
+  color: var(--text-soft);
+  white-space: nowrap;
+}
+
+.crop-companions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: var(--sp-5);
+  margin-top: var(--sp-3);
+}
+
+.crop-empty {
+  margin: 0;
+  color: var(--text-soft);
+}
+
+.crop-back {
+  margin: var(--sp-4) 0 0;
+  text-align: center;
+  font-size: var(--fs-sm);
+}
+
+.crop-index {
+  padding: var(--sp-5) 0
+    var(--sp-6);
+}
+
+.crop-family + .crop-family {
+  margin-top: var(--sp-6);
+  padding-top: var(--sp-5);
+  border-top: 1px solid var(--border);
+}
+
+.crop-family-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  margin-bottom: var(--sp-3);
+}
+
+.crop-family-head h2 {
+  margin: 0;
+}
+
+.ref-more {
+  margin: var(--sp-4) 0 0;
+}
