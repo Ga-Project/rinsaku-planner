@@ -150,6 +150,35 @@ test("FAQ は野菜名を含み、答えが空でない", () => {
   }
 });
 
+test("列挙が空でも文が壊れない（同じ科に自分しかいない作物）", () => {
+  // オクラ・イチゴ・サトイモは科に1件しかいない。列挙を無条件に差し込むと
+  // 「区画ではなども同じ2年のあいだ避けます」という空の列挙が残る。
+  const alone = pages.filter((p) => p.sameFamily.length === 0);
+  assert.ok(alone.length > 0, "科に1件だけの作物が無くなった（検査の前提が崩れた）");
+  for (const p of pages) {
+    const first = p.faq[0].a;
+    if (p.sameFamily.length === 0) {
+      // 仲間がいないので、名前を並べる言い回しを使ってはいけない
+      assert.ok(
+        !first.includes("なども"),
+        `${p.name}: 挙げる相手がいないのに列挙の言い回しが残っている`,
+      );
+    } else if (p.tier !== "none") {
+      // 使うなら必ず実在する仲間の名前が直前に入っていること
+      const names = p.sameFamily.slice(0, 3).map((c) => c.name);
+      assert.ok(
+        first.includes(`${names.join("・")}なども`),
+        `${p.name}: 列挙の中身が入っていない`,
+      );
+    }
+    // 助詞や読点のあとがそのまま句点になる＝差し込みが空だった痕跡
+    for (const text of [p.description, p.rotationLine, ...p.faq.map((q) => q.a)]) {
+      assert.ok(!/[、・「]。/.test(text), `${p.name}: 空の差し込みで文が切れている`);
+      assert.ok(!/。。|、、|・・/.test(text), `${p.name}: 記号が重複している`);
+    }
+  }
+});
+
 test("FAQ の年数はマスタの値と一致する（本文に直書きしていない）", () => {
   for (const p of pages.filter((x) => x.tier !== "none")) {
     assert.ok(

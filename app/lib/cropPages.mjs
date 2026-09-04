@@ -177,10 +177,16 @@ export function cropPage(slug) {
       a:
         tier === "none"
           ? `${crop.nameJa}が属する${crop.familyJa}は連作障害が出にくいグループで、続けて植えやすい野菜です。ただし土の養分は使われるので、堆肥や元肥での土づくりは通常どおり必要です。`
-          : `${crop.nameJa}が属する${crop.familyJa}は、同じ場所に再び植えるまで${crop.rotationYears}年あけるのが目安です。連作障害は野菜の名前ではなく科の単位で起きるため、${crop.nameJa}を作った区画では${sameFamily
-              .slice(0, 3)
-              .map((c) => c.name)
-              .join("・")}なども同じ${crop.rotationYears}年のあいだ避けます。`,
+          : `${crop.nameJa}が属する${crop.familyJa}は、同じ場所に再び植えるまで${crop.rotationYears}年あけるのが目安です。連作障害は野菜の名前ではなく科の単位で起きるため、` +
+            // 同じ科に自分しかいない作物（オクラ・イチゴ・サトイモ）がある。
+            // 列挙を無条件に差し込むと「区画ではなども同じ2年のあいだ避けます」という
+            // 空の列挙が残った文になるので、仲間がいるときだけ名前を挙げる。
+            (sameFamily.length > 0
+              ? `${crop.nameJa}を作った区画では${sameFamily
+                  .slice(0, 3)
+                  .map((c) => c.name)
+                  .join("・")}なども同じ${crop.rotationYears}年のあいだ避けます。`
+              : `${crop.familyJa}の野菜であれば${crop.nameJa}以外でも、同じ${crop.rotationYears}年のあいだは同じ区画を避けます。`),
     },
     {
       q: `${crop.nameJa}のあとには何を植えればよいですか？`,
