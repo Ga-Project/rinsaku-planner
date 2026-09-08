@@ -119,4 +119,25 @@ export interface Suggestion {
   remainingYears: number | null;
   /** 判定の日本語説明。 */
   reason: string;
+  /** その年すでにこの区画へ記録している同じ科の作付け（判定には影響しない注記）。 */
+  sameYearRecord: { cropId: string; nameJa: string }[];
+}
+
+/** cropFocus が返す1件（「この野菜を植えられるか」を区画ごとに判定したもの）。 */
+export interface FocusVerdict {
+  bedId: string;
+  /** 区画の表示名（利用者が空にできるので、画面側で既定文言を補う）。 */
+  label: string;
+  /** その区画にその野菜を植える場合の連作判定（判定エンジンの値をそのまま持つ）。 */
+  status: RotationStatus;
+  /** どの年に植える前提で判定したか。画面に必ず出す（判定は年に依存する）。 */
+  targetYear: number;
+  /** 同じ科を直近で植えた年（無ければ null）。 */
+  lastSameFamilyYear: number | null;
+  /** あと何年あければ植えられるか（status が ng のときだけ数値、他は null）。 */
+  remainingYears: number | null;
+  /** 判定の日本語説明。 */
+  reason: string;
+  /** その年すでにこの区画へ記録している同じ科の作付け（判定には影響しない注記）。 */
+  sameYearRecord: { cropId: string; nameJa: string }[];
 }

@@ -3,6 +3,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { AppState, Bed, Garden } from "../lib/types";
 import { loadState, saveState, emptyState, newId } from "../lib/storage.mjs";
+import { CROPS, cropById } from "../lib/crops.mjs";
+import {
+  focusCropIdFromSearch,
+  hrefWithoutCrop,
+  focusBedVerdicts,
+  summarizeFocus,
+} from "../lib/cropFocus.mjs";
+import { CropFocus } from "./CropFocus";
 import { BedGrid } from "./BedGrid";
 import { BedEditor } from "./BedEditor";
 import { ScheduleTimeline } from "./ScheduleTimeline";
@@ -21,6 +29,11 @@ export function PlannerApp() {
   const [state, setState] = useState<AppState>(emptyState);
   const [selectedBedId, setSelectedBedId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // 野菜ページから ?crop=<id> で渡ってきた「植えたい野菜」。マスタに実在する id だけ。
+  const [focusCropId, setFocusCropId] = useState<string | null>(null);
+  // 同じ区画をもう一度選んでも編集パネルへ運ぶための連番（選択 id だけを見ると
+  // 値が変わらず、押しても何も起きないコントロールになる）。
+  const [scrollTick, setScrollTick] = useState(0);
   const editorRef = useRef<HTMLDivElement>(null);
 
   // 初回マウントで localStorage から読み込む（SSR とのハイドレーション不整合を避ける）。
@@ -32,6 +45,10 @@ export function PlannerApp() {
       loaded.activeGardenId = g.id;
     }
     setState(loaded);
+    // 「植えたい野菜」を URL から受け取る。static export では useSearchParams が
+    // Suspense 境界を要求するので、クライアントでしか動かないここで直接読む。
+    // クエリ名と検証は cropFocus.mjs（リンクを書く側と同じ出典）に任せる。
+    setFocusCropId(focusCropIdFromSearch(window.location.search, CROPS));
     setMounted(true);
   }, []);
 
@@ -47,6 +64,11 @@ export function PlannerApp() {
 
   // 区画を選んだら編集パネルを表示位置までスクロールし、フォーカスを移す
   // （モバイルで見失わない・SR/キーボード利用者にパネル出現を伝える）。
+  const selectBed = useCallback((id: string) => {
+    setSelectedBedId(id);
+    setScrollTick((n) => n + 1);
+  }, []);
+
   useEffect(() => {
     if (selectedBedId && editorRef.current) {
       editorRef.current.scrollIntoView({
@@ -55,7 +77,7 @@ export function PlannerApp() {
       });
       editorRef.current.focus();
     }
-  }, [selectedBedId]);
+  }, [selectedBedId, scrollTick]);
 
   const activeGarden =
     state.gardens.find((g) => g.id === state.activeGardenId) ??
@@ -159,6 +181,17 @@ export function PlannerApp() {
     [updateActiveGarden],
   );
 
+  // 解除したら URL からも落とす。残したまま再読み込みすると、解除したはずの
+  // 野菜がまた前面に出る（共有・ブックマークされた URL も同じ状態を再現する）。
+  const clearFocus = useCallback(() => {
+    setFocusCropId(null);
+    window.history.replaceState(
+      null,
+      "",
+      hrefWithoutCrop(window.location.href),
+    );
+  }, []);
+
   const addGarden = useCallback(() => {
     const g = defaultGarden();
     setState((prev) => ({
@@ -227,6 +260,13 @@ export function PlannerApp() {
   // ここに到達するのは mounted 後だけなので、ハイドレーション不整合は起きない。
   const now = new Date();
 
+  // 「この野菜を植えられる区画」。連作だけを見る（適期は PlantNow の担当）。
+  const focusCrop = focusCropId ? cropById(focusCropId) : undefined;
+  const focusYear = now.getFullYear();
+  const focusVerdicts = focusCrop
+    ? focusBedVerdicts(activeGarden.beds, focusCrop, cropById, focusYear)
+    : [];
+
   return (
     <>
       {error && (
@@ -267,6 +307,19 @@ export function PlannerApp() {
           新しい菜園
         </button>
       </div>
+
+      {focusCrop && (
+        <CropFocus
+          crop={focusCrop}
+          verdicts={focusVerdicts}
+          headline={summarizeFocus(focusVerdicts, focusCrop.nameJa).headline}
+          targetYear={focusYear}
+          selectedBedId={selectedBedId}
+          onSelectBed={selectBed}
+          onAddBed={() => addBedAt(0, 0)}
+          onClear={clearFocus}
+        />
+      )}
 
       <section className="app-section" aria-label="菜園のグリッド">
         <div className="section-head">
@@ -317,7 +370,7 @@ export function PlannerApp() {
             <BedGrid
               garden={activeGarden}
               selectedBedId={selectedBedId}
-              onSelectBed={setSelectedBedId}
+              onSelectBed={selectBed}
               onAddBedAt={addBedAt}
             />
             <div

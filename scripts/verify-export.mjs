@@ -12,9 +12,10 @@
 //   CI の build ジョブで pnpm build の直後。ここで落とせば公開まで進まない。
 //
 // 使い方: node scripts/verify-export.mjs <outDir> [basePath]
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { cropSlugs, cropUrl, cropIndexUrl } from "../app/lib/cropPages.mjs";
+import { plannerHrefForCrop } from "../app/lib/cropFocus.mjs";
 import { SITE_URL } from "../app/lib/site.mjs";
 
 const outDir = process.argv[2] ?? "out";
@@ -43,6 +44,8 @@ const pages = [
     dir: join("yasai", slug),
     url: cropUrl(slug),
     label: `野菜 ${slug}`,
+    // その野菜を持ったままプランナーへ渡すリンク（?crop=）が残っているか。
+    focusSlug: slug,
   })),
 ];
 
@@ -65,6 +68,22 @@ for (const p of pages) {
     fail(`${p.label}: og:url が ${ogUrl} （期待 ${p.url}）`);
   }
 
+  // 野菜ページからプランナーへ、その野菜の名前を持って渡せているか。
+  // ここが素の "/#app" に戻ると、検索で来た人は着いた先で同じ野菜を
+  // もう一度選び直すことになる。59ページぶん静かに劣化し、
+  // lib を見るユニットテストは1件も反応しない。
+  // 期待値はリンク生成器そのものから作る（検査側に文字列を書き写さない）。
+  if (p.focusSlug) {
+    const expected = `href="${basePath}${plannerHrefForCrop(p.focusSlug)}"`;
+    const hits = s.split(expected).length - 1;
+    // ヘッダーと本文の2箇所。片方が素の "/#app" に戻る退行を捉える。
+    if (hits < 2) {
+      fail(
+        `${p.label}: プランナーへ野菜を渡すリンクが ${hits} 箇所（期待 2・${expected}）`,
+      );
+    }
+  }
+
   // basePath: 内部リンクは必ず basePath 配下。素の href="/" が1つでもあれば製品の外へ出る
   if (basePath) {
     const bare = s.match(/href="\/(?!\/)(?!$)[^"]*"/g) ?? [];
@@ -73,6 +92,40 @@ for (const p of pages) {
     if (s.includes('href="/"')) outside.push('href="/"');
     if (outside.length > 0) {
       fail(`${p.label}: basePath の外へ出るリンク ${[...new Set(outside)].join(", ")}`);
+    }
+  }
+}
+
+// 「植えたい野菜」の帯そのものがクライアントの束に載っているか。
+//
+// この帯は "use client" の PlannerApp が mount 後に window.location.search を
+// 読んでから描画するので、書き出した HTML には一切現れない（意図どおり）。
+// そのため帯を描く JSX を丸ごと消しても、型・lint・テスト・ここまでの検査は
+// すべて緑のまま通る＝野菜ページ側の 59 本のリンクだけが残り、
+// 押した先には何も無い、という壊れ方をする。
+//
+// 束に帯の目印が残っていることを見て、その壊れ方だけは捉える。
+// ※ これは「コードが載っていること」しか見ない。読み取りの配線そのもの
+//   （search を読んで state に入れる1行）が消えた場合はここでは捉えられず、
+//   実ブラウザでの確認が要る。
+const CLIENT_MARKERS = ["crop-focus-bed", "crop-focus-headline"];
+const chunkDir = join(outDir, "_next", "static", "chunks");
+if (!existsSync(chunkDir)) {
+  fail(`クライアントの束が書き出されていない: ${chunkDir}`);
+} else {
+  const files = [];
+  const walk = (dir) => {
+    for (const e of readdirSync(dir, { withFileTypes: true })) {
+      const full = join(dir, e.name);
+      if (e.isDirectory()) walk(full);
+      else if (e.name.endsWith(".js")) files.push(full);
+    }
+  };
+  walk(chunkDir);
+  const bundle = files.map((f) => readFileSync(f, "utf8")).join("\n");
+  for (const marker of CLIENT_MARKERS) {
+    if (!bundle.includes(marker)) {
+      fail(`「植えたい野菜」の帯が束に無い（目印 ${marker}）`);
     }
   }
 }

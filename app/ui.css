@@ -1363,3 +1363,199 @@ a.crop-chip:hover {
 .ref-more {
   margin: var(--sp-4) 0 0;
 }
+
+/* ===== 野菜ページから持ち込んだ「植えたい野菜」の帯 =====
+   トップに合流する前の文脈（どの野菜を見に来たか）を保つ場所。
+   アプリ本体（緑・accent）とは別の由来であることを、製品の二次色である
+   素焼き鉢テラコッタ（--soil 系）の地で示す。地は theme.css で AA 実測済み
+   （--text 対 --soil-tint = light 13.71 / dark 12.49）。
+   --soil を --soil-tint の上に置く組み合わせは新規で、light 5.56 / dark 6.57。 */
+.crop-focus {
+  margin-bottom: var(--sp-6);
+  padding: var(--sp-4);
+  border: 1px solid var(--soil-line);
+  border-radius: var(--radius);
+  background: var(--soil-tint);
+}
+.crop-focus-head {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-3);
+}
+.crop-focus-eyebrow {
+  margin: 0;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-bold);
+  letter-spacing: 0.04em;
+  color: var(--soil);
+}
+.crop-focus-title {
+  margin: var(--sp-1) 0 0;
+  font-size: var(--fs-lg);
+  line-height: 1.3;
+}
+/* 解除ボタンも帯の上に乗る押せる面。素の --border-strong は帯（--soil-tint）に対して
+   light 1.26:1 で境界にならない（チップと同じ理由）。土の色を混ぜて明度差を作る。 */
+.crop-focus-clear {
+  flex: none;
+  border-color: color-mix(in srgb, var(--soil) 78%, var(--border-strong));
+}
+/* 判定が何に依存しているか（連作だけ・どの年か）。脚注に落とさず見出しの直下に置く。 */
+.crop-focus-scope {
+  margin: var(--sp-2) 0 0;
+  font-size: var(--fs-sm);
+  color: var(--text-soft);
+}
+.crop-focus-facts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-1) var(--sp-2);
+  margin: var(--sp-2) 0 0;
+  font-size: var(--fs-sm);
+  color: var(--text-soft);
+}
+.crop-focus-sow {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+}
+.crop-focus-sow svg {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  color: var(--soil);
+}
+.crop-focus-headline {
+  margin: var(--sp-3) 0 0;
+  font-weight: var(--fw-bold);
+}
+.crop-focus-empty {
+  margin-top: var(--sp-3);
+}
+.crop-focus-list {
+  list-style: none;
+  padding: 0;
+  margin: var(--sp-3) 0 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+  gap: var(--sp-2);
+}
+/* 区画1件＝押せる面。
+   枠は既存 .plantnow-chip と同じ流儀。素の --border-strong は帯（--soil-tint）の上で
+   1.26:1、素の面の上でも 1.38:1 しか出ず「押せる面」の境界として成立しない（実測）。
+   セマンティック色を混ぜて明度差を作る。実測の最小は light 3.35:1 / dark 4.81:1。 */
+.crop-focus-bed {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  /* タッチ target を製品標準（.btn / .plantnow-chip）に揃える。 */
+  min-height: 44px;
+  padding: var(--sp-2) var(--sp-3);
+  border: 1.5px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color var(--transition),
+    box-shadow var(--transition);
+}
+.crop-focus-bed:hover {
+  border-color: var(--accent);
+}
+.crop-focus-bed[aria-current="true"] {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-ring);
+}
+.crop-focus-bed-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  flex-wrap: wrap;
+}
+.crop-focus-bed-head svg {
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+.crop-focus-bed-label {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  word-break: break-word;
+}
+.crop-focus-bed-note {
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-bold);
+  color: var(--text-soft);
+}
+/* 判定の言葉。区画セルの「連作NG」等とは別の問いに答えているので語彙を分け、
+   必ず野菜名を主語にした文にする（コンポーネント側で組み立てる）。 */
+.crop-focus-bed-verdict {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-bold);
+  line-height: 1.3;
+}
+.crop-focus-bed-reason,
+.crop-focus-bed-record {
+  font-size: var(--fs-xs);
+  color: var(--text-soft);
+  line-height: 1.4;
+}
+/* その年すでに記録している同じ科の注記。判定ではないので語調を分ける。 */
+.crop-focus-bed-record {
+  font-weight: var(--fw-bold);
+}
+.crop-focus-hint {
+  margin: var(--sp-1) 0 0;
+  font-size: var(--fs-sm);
+  color: var(--text-soft);
+}
+.crop-focus-bed.is-ok {
+  background: var(--ok-tint);
+  border-color: color-mix(in srgb, var(--ok) 78%, var(--border-strong));
+}
+.crop-focus-bed.is-ok svg {
+  color: var(--ok);
+}
+.crop-focus-bed.is-caution {
+  background: var(--warn-tint);
+  border-color: color-mix(in srgb, var(--warn) 78%, var(--border-strong));
+  border-style: dashed;
+}
+.crop-focus-bed.is-caution svg {
+  color: var(--warn);
+}
+.crop-focus-bed.is-ng {
+  background: var(--err-tint);
+  border-color: color-mix(in srgb, var(--err) 78%, var(--border-strong));
+}
+.crop-focus-bed.is-ng svg {
+  color: var(--err);
+}
+
+/* 狭い画面。帯の見出しと解除ボタンを横並びのまま潰さない。
+   ボタンの nowrap は野菜名が長いと帯からはみ出すので、ここだけ折返しを許す。 */
+@media (max-width: 640px) {
+  .crop-focus {
+    padding: var(--sp-3);
+  }
+  .crop-focus-head {
+    flex-wrap: wrap;
+  }
+  .crop-focus-title {
+    font-size: var(--fs-md);
+  }
+  .crop-focus-list {
+    grid-template-columns: 1fr;
+  }
+  .crop-focus-empty .btn {
+    white-space: normal;
+    height: auto;
+    text-align: left;
+  }
+}

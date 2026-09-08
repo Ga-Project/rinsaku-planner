@@ -14,6 +14,7 @@ import {
   cropJsonLd,
   cropBreadcrumbJsonLd,
 } from "../../lib/cropPages.mjs";
+import { plannerHrefForCrop } from "../../lib/cropFocus.mjs";
 import { faqJsonLd, SITE_NAME } from "../../lib/reference.mjs";
 import { OG_IMAGE } from "../../lib/og.mjs";
 
@@ -160,10 +161,16 @@ export default function CropDetailPage({ params }: Params) {
         本文へスキップ
       </a>
 
+      {/* ヘッダー・本文とも、野菜の名前を持ったままプランナーへ渡す（?crop=）。
+          渡した先で答えるのは「自分のどの区画にこの野菜を置けるか」までで、
+          作付けの記録そのものは利用者が区画の編集で行う（こちらから作物を
+          入れて記録の一歩手前まで進めることはしない＝意図しない記録を作らない）。
+          リンクの組み立ては cropFocus.mjs が唯一の出典で、プランナー側の
+          読み取りと往復テストで固定している。 */}
       <SiteHeader
         action={
-          <Link className="btn btn-primary" href="/#app">
-            畑をつくる
+          <Link className="btn btn-primary" href={plannerHrefForCrop(page.slug)}>
+            畑で見る
           </Link>
         }
       />
@@ -284,8 +291,11 @@ export default function CropDetailPage({ params }: Params) {
               </div>
 
               <p className="ref-cta">
-                <Link className="btn btn-primary btn-lg" href="/#app">
-                  {page.name}を区画に置いてみる
+                <Link
+                  className="btn btn-primary btn-lg"
+                  href={plannerHrefForCrop(page.slug)}
+                >
+                  {page.name}を植えられる区画を見る
                 </Link>
               </p>
               <p className="crop-back">
