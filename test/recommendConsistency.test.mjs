@@ -181,3 +181,57 @@ test("避けたい候補が指す「◯◯年から」は、実際に置ける�
     `${target}年から置けると言いながら、その年もまだ避けたい年`,
   );
 });
+
+// --- 区画のバナーが名指しした年に記録しても、区画が赤くならない ---------------
+//
+// 上の検査は「候補として勧めた → 記録した」の向きしか見ていない。区画の判定
+// （bedStatus）自身も「どの作付けからも目安の年数があくのは早くて◯年です」という
+// 検算できる年を名指しするので、その年についても同じことを確かめる必要がある。
+//
+// bedStatus は間隔を数えるとき判定対象の作付け自身を履歴から外す。その集合のまま
+// 次に置ける年まで数えると、外したその作付けの隣を「どこからも離れている年」として
+// 指してしまい、同じパネルに並ぶ記録と突き合わせた利用者に反証される。
+
+test("区画のバナーが名指しした年は、その区画に実際に置ける年である", () => {
+  const bad = [];
+  let checked = 0;
+  for (const c of CROPS) {
+    for (let a = 2020; a <= 2030; a++) {
+      for (let b = a; b <= 2030; b++) {
+        const plantings = [
+          { cropId: c.id, year: a },
+          { cropId: c.id, year: b },
+        ];
+        const s = bedStatus(plantings, cropById);
+        if (s.status !== "ng") continue;
+        checked += 1;
+        if (s.nextPlantableYear === null) {
+          bad.push(`${c.nameJa} ${a}/${b}: ng なのに置ける年を出していない`);
+          continue;
+        }
+        // 名指しした年に実際に記録して、区画が赤くならないことを確かめる。
+        const after = bedStatus(
+          [...plantings, { cropId: c.id, year: s.nextPlantableYear }],
+          cropById,
+        );
+        if (after.status === "ng") {
+          bad.push(
+            `${c.nameJa} ${a}/${b} → ${s.nextPlantableYear}年を名指ししたが、記録すると ng`,
+          );
+        }
+        // ひとつ手前の年はまだ赤い（必要以上に先を指していない）。
+        const earlier = bedStatus(
+          [...plantings, { cropId: c.id, year: s.nextPlantableYear - 1 }],
+          cropById,
+        );
+        if (earlier.status !== "ng") {
+          bad.push(
+            `${c.nameJa} ${a}/${b} → ${s.nextPlantableYear}年より手前も置ける`,
+          );
+        }
+      }
+    }
+  }
+  assert.ok(checked > 0, "ng の区画を1つも作れていない＝検査が空振り");
+  assert.deepEqual(bad.slice(0, 10), [], `${bad.length}件で名指しした年が正しくない`);
+});

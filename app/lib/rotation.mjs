@@ -8,7 +8,7 @@
  */
 
 /**
- * @typedef {Object} PastPlanting
+ * @typedef {Object} BedPlanting
  * @property {string} familyKey その作付けの作物が属する科のキー
  * @property {number} year 作付けの年（西暦）
  * @property {string} [cropId] 作物 id（任意）
@@ -24,6 +24,42 @@
  * @property {string} familyKey 判定対象の科
  * @property {string} reason 利用者向けの日本語説明
  */
+
+/**
+ * その科を次に置ける年（`fromYear` より後で、渡された作付け年すべてから
+ * `req` 年以上離れる最小の年）。
+ *
+ * 直近の1件から `目安 - 間隔` で出すと、その年が別の同じ科の作付けで
+ * 塞がっていることがある（2024年と2028年に記録があり、目安4年で2026年に
+ * 植えようとすると「あと2年」＝塞がっている2028年を指す）。勧めた年を製品が
+ * 即座に否定することになるので、実際に置ける年まで送る。
+ *
+ * ⚠️ `years` には **その区画にある同じ科の作付けを漏れなく渡すこと**。
+ * 1件でも外すと、外した作付けの隣を「どこからも離れている年」として指す。
+ * （`bedStatus` は判定対象の作付け自身を履歴から外して間隔を数えるが、
+ *   次に置ける年は区画の性質なので、そこでは全件を渡し直す。）
+ *
+ * 最も遠い記録を `req` 年またいだ年は必ず全ての記録から `req` 以上離れるので、
+ * 探索は `limit` 以内で必ず解に当たる（1から昇順なので最初の解が最小）。
+ *
+ * @param {number[]} years 同じ科の作付けの年（全件）
+ * @param {number} req あけたい年数（1以上）
+ * @param {number} fromYear この年より後を探す
+ * @returns {number}
+ */
+function findNextPlantableYear(years, req, fromYear) {
+  let limit = req;
+  for (const y of years) {
+    const d = Math.abs(y - fromYear);
+    if (d > limit - req) limit = d + req;
+  }
+  for (let k = 1; k <= limit; k++) {
+    const y = fromYear + k;
+    if (years.every((r) => Math.abs(y - r) >= req)) return y;
+  }
+  // limit の取り方から到達しない。
+  return fromYear + req;
+}
 
 /**
  * 指定の区画に「ある科」を targetYear に植える場合の連作判定を返す。
@@ -47,16 +83,16 @@
  *   - 間隔が同じ過去と未来が並ぶときは過去を採る（すでに起きた事実を先に言う）。
  *   - 同科の履歴が無ければ ok。
  *
- * @param {PastPlanting[]} past 同じ区画の作付け（順不同可・targetYear より後のものを含んでよい）
+ * @param {BedPlanting[]} records 同じ区画の作付け（順不同可・targetYear の前後どちらも含んでよい）
  * @param {string} familyKey 植えようとする作物の科
  * @param {number} requiredYears その科の推奨間隔（年）。整数・負値は 0 とみなす
  * @param {number} targetYear 植えようとする年
  * @returns {RotationResult}
  */
-export function evaluateRotation(past, familyKey, requiredYears, targetYear) {
+export function evaluateRotation(records, familyKey, requiredYears, targetYear) {
   const req =
     Number.isInteger(requiredYears) && requiredYears > 0 ? requiredYears : 0;
-  const list = Array.isArray(past) ? past : [];
+  const list = Array.isArray(records) ? records : [];
 
   // この区画にある同じ科の作付けの年（昇順）。文面と待ち年数の計算で共用する。
   /** @type {number[]} */
@@ -110,30 +146,6 @@ export function evaluateRotation(past, familyKey, requiredYears, targetYear) {
   // たとえば 2024年 と 2028年 に記録があって 2026年に植えようとした場合
   // 「あと2年」＝2028年 を指すが、その 2028年 には同じ科が入っている。
   // 勧めた年を製品が即座に否定することになるので、実際に置ける年まで送る。
-  /**
-   * 次に置ける年までの年数を数える。
-   *
-   * 直近の1件から `目安 - 間隔` で出すと、その年が別の同じ科の作付けで
-   * 塞がっていることがある（2024年と2028年に記録があり、目安4年で
-   * 2026年に植えようとすると「あと2年」＝塞がっている2028年を指す）。
-   * 勧めた年を製品が即座に否定することになるので、実際に置ける年まで送る。
-   *
-   * 最も遠い記録を req 年またいだ年は必ず全ての記録から req 以上離れるので、
-   * 探索は `limit` 以内で必ず解に当たる（1から昇順なので最初の解が最小）。
-   */
-  const findNextPlantableYear = () => {
-    let limit = req;
-    for (const y of sameFamilyYears) {
-      const d = Math.abs(y - targetYear);
-      if (d > limit - req) limit = d + req;
-    }
-    for (let k = 1; k <= limit; k++) {
-      const y = targetYear + k;
-      if (sameFamilyYears.every((r) => Math.abs(y - r) >= req)) return y;
-    }
-    // limit の取り方から到達しない。
-    return targetYear + req;
-  };
 
   if (req <= 0) {
     return {
@@ -145,7 +157,7 @@ export function evaluateRotation(past, familyKey, requiredYears, targetYear) {
   }
 
   if (gap < req) {
-    const next = findNextPlantableYear();
+    const next = findNextPlantableYear(sameFamilyYears, req, targetYear);
     return {
       ...base,
       status: "ng",
@@ -154,7 +166,7 @@ export function evaluateRotation(past, familyKey, requiredYears, targetYear) {
       // 年を列挙しないのは、記録件数に対して文が伸びるのを避けるため
       // （検算に要る全件は、同じパネルの「作付けの記録」に並んでいる）。
       // 「どの作付けからも」が、その一覧を見るよう促す語。
-      reason: `${year}年に同じ科の作付けがあります。どの作付けからも目安の${req}年あくのは${next}年からです。`,
+      reason: `${year}年に同じ科の作付けがあります。どの作付けからも目安の${req}年あくのは、早くて${next}年です。`,
     };
   }
 
@@ -256,22 +268,45 @@ export function bedStatus(plantings, cropLookup) {
     .filter((p) => p !== null);
 
   const result = evaluateRotation(
-    /** @type {PastPlanting[]} */ (priorPlantings),
+    /** @type {BedPlanting[]} */ (priorPlantings),
     info.familyKey,
     info.rotationYears,
     latest.year,
   );
 
+  // 間隔（status / gapYears）は「判定対象の作付け自身を外した履歴」に対して
+  // 数えるのが正しい。しかし **次に置ける年は区画の性質** なので、そこだけは
+  // この区画にある同じ科の作付けを全件（判定対象の作付けを含む）で数え直す。
+  // 外したまま数えると、外したその作付けの隣の年を「どの作付けからも離れている年」
+  // として名指しし、同じパネルに並ぶ記録と突き合わせた利用者に反証される。
+  const allSameFamilyYears = list
+    .filter((p) => {
+      const ci = cropLookup(p.cropId);
+      return ci && ci.familyKey === info.familyKey;
+    })
+    .map((p) => p.year);
+  const nextPlantableYear =
+    result.status === "ng" && info.rotationYears > 0
+      ? findNextPlantableYear(
+          allSameFamilyYears,
+          info.rotationYears,
+          latest.year,
+        )
+      : null;
+
   return {
     ...result,
-    // ここは「すでに記録した作付け」の判定で、その作付け自身を履歴から外して
-    // 判定している。素の文（同じ科の作付けの記録はありません）をそのまま出すと、
+    nextPlantableYear,
+    // 素の文（同じ科の作付けの記録はありません）をそのまま出すと、
     // 「すでに記録した作付けの判定 ── 2027年 トマト」という見出しの直下で
     // 「記録はありません」と言うことになるので、ここだけ言い換える。
+    // ng の文は、上で数え直した年に差し替える。
     reason:
       result.nearestSameFamilyYear === null
         ? "前後の年に、同じ科の作付けはほかにありません。"
-        : result.reason,
+        : nextPlantableYear !== null
+          ? `${result.nearestSameFamilyYear}年に同じ科の作付けがあります。どの作付けからも目安の${result.requiredYears}年あくのは、早くて${nextPlantableYear}年です。`
+          : result.reason,
     latestCropId: latest.cropId,
     latestYear: latest.year,
   };

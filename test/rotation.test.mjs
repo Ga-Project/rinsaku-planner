@@ -20,7 +20,7 @@ test("evaluateRotation: 間隔不足は ng（gap < 必要年数）", () => {
   assert.equal(r.status, "ng");
   assert.equal(r.nearestSameFamilyYear, 2024);
   assert.equal(r.gapYears, 2);
-  assert.match(r.reason, /2028年からです/);
+  assert.match(r.reason, /早くて2028年です/);
 });
 
 test("evaluateRotation: 目安ちょうどは caution（gap === 必要年数）", () => {
@@ -167,7 +167,7 @@ test("evaluateRotation: あと◯年が、別の同じ科で塞がった年を�
   // 指した年が実際に避けなくてよい年であることを、判定を呼び直して確かめる。
   const at = evaluateRotation(past, "solanaceae", 4, r.nextPlantableYear);
   assert.notEqual(at.status, "ng", `${r.nextPlantableYear}年も避けたい年だった`);
-  assert.match(r.reason, new RegExp(`${r.nextPlantableYear}年からです`));
+  assert.match(r.reason, new RegExp(`早くて${r.nextPlantableYear}年です`));
   // ひとつ手前の年はまだ避けたい年（最小の年を指している）。
   assert.equal(
     evaluateRotation(past, "solanaceae", 4, r.nextPlantableYear - 1).status,
@@ -186,7 +186,7 @@ test("evaluateRotation: 単純なケースの『あと◯年』は従来どお�
   assert.equal(r.nextPlantableYear, 2028);
   assert.equal(
     r.reason,
-    "2024年に同じ科の作付けがあります。どの作付けからも目安の4年あくのは2028年からです。",
+    "2024年に同じ科の作付けがあります。どの作付けからも目安の4年あくのは、早くて2028年です。",
   );
 });
 
@@ -223,7 +223,7 @@ test("evaluateRotation: 同年の作付けは間隔0の衝突として扱う（�
   assert.equal(r.nextPlantableYear, 2030);
   assert.equal(
     r.reason,
-    "2026年に同じ科の作付けがあります。どの作付けからも目安の4年あくのは2030年からです。",
+    "2026年に同じ科の作付けがあります。どの作付けからも目安の4年あくのは、早くて2030年です。",
   );
 });
 
@@ -334,7 +334,7 @@ test("bedStatus: 各分岐の説明文を固定する", () => {
   assert.equal(ng.status, "ng");
   assert.equal(
     ng.reason,
-    "2024年に同じ科の作付けがあります。どの作付けからも目安の4年あくのは2028年からです。",
+    "2024年に同じ科の作付けがあります。どの作付けからも目安の4年あくのは、早くて2030年です。",
   );
 
   // caution（目安ちょうど）

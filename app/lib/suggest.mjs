@@ -13,7 +13,7 @@ import { evaluateRotation } from "./rotation.mjs";
  * @typedef {import("./types").Crop} Crop
  * @typedef {import("./types").Timing} Timing
  * @typedef {import("./types").Suggestion} Suggestion
- * @typedef {import("./rotation.mjs").PastPlanting} PastPlanting
+ * @typedef {import("./rotation.mjs").BedPlanting} BedPlanting
  */
 
 /** 表示順に使うステータスの並び（軽い順）。 */
@@ -88,8 +88,8 @@ export function suggestPlantings(plantings, crops, month, year) {
   const cropMap = new Map(list.map((c) => [c.id, c]));
 
   // 区画の履歴を「科 × 年」に落とす（作物マスタに無い id は判定から外す）。
-  /** @type {PastPlanting[]} */
-  const past = (Array.isArray(plantings) ? plantings : [])
+  /** @type {BedPlanting[]} */
+  const records = (Array.isArray(plantings) ? plantings : [])
     .map((p) => {
       if (!p || typeof p.cropId !== "string" || !Number.isInteger(p.year)) {
         return null;
@@ -109,7 +109,7 @@ export function suggestPlantings(plantings, crops, month, year) {
 
     const targetYear = targetYearOf(timing, month, year);
     const result = evaluateRotation(
-      past,
+      records,
       c.familyKey,
       c.rotationYears,
       targetYear,

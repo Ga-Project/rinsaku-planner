@@ -70,11 +70,13 @@ function Group({
               {/* 年数ではなく年を出す。「あと5年」は起点が画面に無いので
                   検算できず、同じ文の「目安3年」と並ぶと引き算の誤りに見える。
                   年なら基準点が要らず、候補が横並びのときどれが先に空くかも
-                  そのまま読める。避けたい候補のときだけ出す（間隔に注意・
+                  そのまま読める。「◯年から」ではなく「早くて◯年」なのは、
+                  さらに先の年に同じ科の記録があると、その年以降ずっと置ける
+                  とは限らないため。避けたい候補のときだけ出す（間隔に注意・
                   植えられる のときは判定年そのものに植えられるので誤読になる）。 */}
               {s.status === "ng" && s.nextPlantableYear !== null && (
                 <span className="plantnow-chip-note">
-                  {s.nextPlantableYear}年から
+                  早くて{s.nextPlantableYear}年
                 </span>
               )}
               {s.status === "caution" && (
@@ -136,13 +138,6 @@ export function PlantNow({
       <h4 id="plantnow-heading" className="plantnow-title">
         いま植えるなら（{monthLabel}）
       </h4>
-      {/* 判定がどの年を前提にしているかを置く。すぐ上の区画のバナーが
-          「すでに記録した作付けの判定 ── 2027年 トマト」と名乗るのと対にする。
-          判定の説明文が年を名指しするようになったので、その基準点が要る。 */}
-      <p className="muted plantnow-scope">
-        これから植える場合の判定 ── {year}年{monthLabel}
-      </p>
-
       {total === 0 ? (
         <p className="muted">
           {monthLabel}も{nextLabel}
@@ -150,6 +145,13 @@ export function PlantNow({
         </p>
       ) : (
         <>
+          {/* 判定がどの年を前提にしているかを置く。すぐ上の区画のバナーが
+              「すでに記録した作付けの判定 ── 2027年 トマト」と名乗るのと対にする。
+              判定の説明文が年を名指しするようになったので、その基準点が要る。
+              判定する対象が無い月には出さない。 */}
+          <p className="muted plantnow-scope">
+            これから植える場合の判定 ── {year}年{monthLabel}
+          </p>
           <p className="muted plantnow-lead">
             {hasThisMonth
               ? `${monthLabel}が適期の野菜を、これから植えるものとして、この区画の作付けの記録に照らして並べています。選ぶと下の作付けフォームに入ります。`
