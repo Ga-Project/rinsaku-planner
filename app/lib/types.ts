@@ -93,6 +93,11 @@ export interface RotationResult {
   direction: "past" | "future" | null;
   /** 判定年とその年の間隔（絶対値）。 */
   gapYears: number | null;
+  /**
+   * あと何年あければ避けなくてよくなるか（status が ng のときだけ数値）。
+   * 「その年が別の同じ科の作付けで塞がっていない」ところまで進めて数える。
+   */
+  yearsToWait: number | null;
   requiredYears: number;
   familyKey: string;
   reason: string;
@@ -122,13 +127,7 @@ export interface Suggestion {
   status: RotationStatus;
   /** 同じ科を植えた（植える予定の）年のうち判定年に最も近いもの（無ければ null）。 */
   nearestSameFamilyYear: number | null;
-  /** その年が判定年より前か後か（同年は "past"）。記録が無ければ null。 */
-  direction: "past" | "future" | null;
-  /**
-   * あと何年あければ植えられるか。
-   * 過去の作付けとの衝突（direction="past"）で ng のときだけ数値。
-   * 予定との衝突は「待てば解ける」問題ではない（待つほど予定に近づく年もある）ので null。
-   */
+  /** あと何年あければ植えられるか（status が ng のときだけ数値、他は null）。 */
   remainingYears: number | null;
   /** 判定の日本語説明。 */
   reason: string;

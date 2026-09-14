@@ -72,18 +72,9 @@ function Group({
                   あと{s.remainingYears}年
                 </span>
               )}
-              {/* 予定との衝突は「あと◯年待てば解ける」形ではない（待つほど
-                  その予定に近づく年もある）ので、年数ではなく事情を出す。 */}
-              {s.remainingYears === null && s.direction === "future" && (
-                <span className="plantnow-chip-note">
-                  {s.nearestSameFamilyYear}年に予定
-                </span>
+              {s.remainingYears === null && s.status === "caution" && (
+                <span className="plantnow-chip-note">目安ちょうど</span>
               )}
-              {s.remainingYears === null &&
-                s.direction !== "future" &&
-                s.status === "caution" && (
-                  <span className="plantnow-chip-note">目安ちょうど</span>
-                )}
             </button>
           </li>
         ))}
@@ -166,7 +157,11 @@ export function PlantNow({
           />
           <Group
             title="植えられますが間隔に注意"
-            note="前に同じ科を植えてから、あけたい年数にちょうど届いたところ"
+            // 群の説明で原因を断定しない。この区画に入っている同じ科の作付けは
+            // 過去のものとは限らず、先の年の作付けを先に記録してあることもある
+            // （そちらとの間隔で ng / caution になる）。「前に植えてから」と書くと、
+            // 一度も植えていない区画の候補に対して事実と違う説明が付く。
+            note="この区画の同じ科の作付けと、あけたい年数にちょうど届いたところ"
             state="植えられますが間隔に注意"
             cls="is-caution"
             Icon={IconWarn}
@@ -176,7 +171,7 @@ export function PlantNow({
           />
           <Group
             title="いまが適期でも、この区画では避けたい"
-            note="前に同じ科を植えてから、まだ年数が足りません"
+            note="この区画の同じ科の作付けとの間隔が、まだ足りません"
             state="この区画では避けたい"
             cls="is-ng"
             Icon={IconStop}
