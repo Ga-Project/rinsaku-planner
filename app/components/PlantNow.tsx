@@ -67,12 +67,17 @@ function Group({
             >
               <span className="plantnow-chip-name">{s.nameJa}</span>
               <span className="plantnow-chip-family">{s.familyJa}</span>
-              {s.remainingYears !== null && (
+              {/* 年数ではなく年を出す。「あと5年」は起点が画面に無いので
+                  検算できず、同じ文の「目安3年」と並ぶと引き算の誤りに見える。
+                  年なら基準点が要らず、候補が横並びのときどれが先に空くかも
+                  そのまま読める。避けたい候補のときだけ出す（間隔に注意・
+                  植えられる のときは判定年そのものに植えられるので誤読になる）。 */}
+              {s.status === "ng" && s.nextPlantableYear !== null && (
                 <span className="plantnow-chip-note">
-                  あと{s.remainingYears}年
+                  {s.nextPlantableYear}年から
                 </span>
               )}
-              {s.remainingYears === null && s.status === "caution" && (
+              {s.status === "caution" && (
                 <span className="plantnow-chip-note">目安ちょうど</span>
               )}
             </button>
@@ -131,6 +136,12 @@ export function PlantNow({
       <h4 id="plantnow-heading" className="plantnow-title">
         いま植えるなら（{monthLabel}）
       </h4>
+      {/* 判定がどの年を前提にしているかを置く。すぐ上の区画のバナーが
+          「すでに記録した作付けの判定 ── 2027年 トマト」と名乗るのと対にする。
+          判定の説明文が年を名指しするようになったので、その基準点が要る。 */}
+      <p className="muted plantnow-scope">
+        これから植える場合の判定 ── {year}年{monthLabel}
+      </p>
 
       {total === 0 ? (
         <p className="muted">
@@ -157,11 +168,7 @@ export function PlantNow({
           />
           <Group
             title="植えられますが間隔に注意"
-            // 群の説明で原因を断定しない。この区画に入っている同じ科の作付けは
-            // 過去のものとは限らず、先の年の作付けを先に記録してあることもある
-            // （そちらとの間隔で ng / caution になる）。「前に植えてから」と書くと、
-            // 一度も植えていない区画の候補に対して事実と違う説明が付く。
-            note="この区画の同じ科の作付けと、あけたい年数にちょうど届いたところ"
+            note="この区画の同じ科の作付けとの間隔が、目安ちょうどです"
             state="植えられますが間隔に注意"
             cls="is-caution"
             Icon={IconWarn}
@@ -171,7 +178,7 @@ export function PlantNow({
           />
           <Group
             title="いまが適期でも、この区画では避けたい"
-            note="この区画の同じ科の作付けとの間隔が、まだ足りません"
+            note="この区画の同じ科の作付けとの間隔が、目安に足りません"
             state="この区画では避けたい"
             cls="is-ng"
             Icon={IconStop}
@@ -180,9 +187,17 @@ export function PlantNow({
             onPick={onPick}
           />
           <Group
-            title={`${nextLabel}からの作付けに`}
+            title={
+              month === 12
+                ? `${year + 1}年${nextLabel}からの作付けに`
+                : `${nextLabel}からの作付けに`
+            }
             note="種や苗の準備に"
-            state={`${nextLabel}から植えられます`}
+            state={
+              month === 12
+                ? `${year + 1}年${nextLabel}から植えられます`
+                : `${nextLabel}から植えられます`
+            }
             cls="is-soon"
             Icon={IconClock}
             items={groups.soon}

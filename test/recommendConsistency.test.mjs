@@ -17,6 +17,14 @@
 //   下の検査はその集合を **述語で明示的に外し**、外した集合が空でないこと
 //   （＝除外が全部を飲み込んでいないこと）も同時に確かめる。
 //
+// ■ この検査が保証しないこと（除外領域があるので、これ単独を網として数えない）
+//   - 「あけたい年数の非対称」が残っている限り、その領域では間隔の数え方が壊れて
+//     いても除外に飲まれる。**間隔の対称性そのものは、除外領域を持たない検査
+//     （rotation.test.mjs の「A年からB年を見た判定と…が一致する」）で固定する。**
+//   - 見るのは「勧めた → 記録したら赤」の向きだけ。逆向き（記録済みの判定は緑
+//     なのに、同じ区画で何も勧めない）は、bedStatus と suggestPlantings が別の年を
+//     判定年にすることから来る別の非対称で、これも別の変更で扱う。
+//
 // 実装の式を書き写すのではなく、両方の経路を実際に呼んで突き合わせる。
 
 import test from "node:test";
@@ -51,17 +59,30 @@ function explainedByRequiredYears(plantings, suggestion) {
 function sweep(onContradiction) {
   for (const other of CROPS) {
     for (let offset = -6; offset <= 6; offset++) {
-      const plantings = [{ cropId: other.id, year: VIEW_YEAR + offset }];
-      for (let month = 1; month <= 12; month++) {
-        for (const s of suggestPlantings(plantings, CROPS, month, VIEW_YEAR)) {
-          // 「避けたい」と言ったものは対象外。それ以外（植えられる・間隔に注意）は
-          // 利用者が選んでよい候補として出しているので、記録して赤くなってはいけない。
-          if (s.status === "ng") continue;
-          const after = bedStatus(
-            [...plantings, { cropId: s.cropId, year: s.targetYear }],
-            cropById,
-          );
-          if (after.status === "ng") onContradiction(plantings, s, after);
+      // 記録1件の区画だけでなく、同じ科が離れて2件ある区画も回す。
+      // 「あと◯年」が塞がった年を飛ばして数える処理は、2件以上でしか効かない。
+      const beds = [
+        [{ cropId: other.id, year: VIEW_YEAR + offset }],
+        [
+          { cropId: other.id, year: VIEW_YEAR + offset },
+          { cropId: other.id, year: VIEW_YEAR + offset + 4 },
+        ],
+      ];
+      for (const plantings of beds) {
+        // もともと連作NGの区画は対象外。検査したいのは「勧めたものを記録したせいで
+        // 赤くなる」ことであって、記録する前から赤い区画の状態ではない。
+        if (bedStatus(plantings, cropById).status === "ng") continue;
+        for (let month = 1; month <= 12; month++) {
+          for (const s of suggestPlantings(plantings, CROPS, month, VIEW_YEAR)) {
+            // 「避けたい」と言ったものは対象外。それ以外（植えられる・間隔に注意）は
+            // 利用者が選んでよい候補として出しているので、記録して赤くなってはいけない。
+            if (s.status === "ng") continue;
+            const after = bedStatus(
+              [...plantings, { cropId: s.cropId, year: s.targetYear }],
+              cropById,
+            );
+            if (after.status === "ng") onContradiction(plantings, s, after);
+          }
         }
       }
     }
@@ -75,7 +96,7 @@ test("勧めた候補を記録しても区画が赤くならない（同じ科�
     if (explainedByRequiredYears(plantings, s)) explained += 1;
     else
       residual.push(
-        `${cropById(plantings[0].cropId).nameJa}@${plantings[0].year} / ` +
+        `${plantings.map((p) => `${cropById(p.cropId).nameJa}@${p.year}`).join("+")} / ` +
           `${s.nameJa}(${s.status}) を ${s.targetYear} に記録 → ng`,
       );
   });
@@ -141,7 +162,7 @@ test("避けたいと言った候補は、記録すると実際に区画が赤�
   }
 });
 
-test("避けたい候補の「あと◯年」は、実際に置ける年を指す", () => {
+test("避けたい候補が指す「◯◯年から」は、実際に置ける年である", () => {
   // 2027年に同じ科が入っている区画。単純に 目安 - 間隔 で数えると、
   // まだ塞がっている年を指してしまう。
   const plantings = [{ cropId: "tomato", year: 2027 }];
@@ -149,14 +170,14 @@ test("避けたい候補の「あと◯年」は、実際に置ける年を指�
     (x) => x.cropId === "tomato",
   );
   assert.equal(s.status, "ng");
-  assert.ok(s.remainingYears > 0, "あと何年かを出していない");
-  const target = s.targetYear + s.remainingYears;
+  assert.ok(s.nextPlantableYear > s.targetYear, "いつから置けるかを出していない");
+  const target = s.nextPlantableYear;
   const at = suggestPlantings(plantings, CROPS, 4, target).find(
     (x) => x.cropId === "tomato",
   );
   assert.notEqual(
     at.status,
     "ng",
-    `あと${s.remainingYears}年と言いながら、${target}年もまだ避けたい年`,
+    `${target}年から置けると言いながら、その年もまだ避けたい年`,
   );
 });

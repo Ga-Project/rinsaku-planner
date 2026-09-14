@@ -125,11 +125,11 @@ export function suggestPlantings(plantings, crops, month, year) {
         targetYear,
         status: result.status,
         nearestSameFamilyYear: result.nearestSameFamilyYear,
-        // 「あと何年あければ植えられるか」。避けたい候補が横並びになったとき、
-        // あと1年のものと あと4年のものを見分けるための数字。
-        // 数え方はエンジンに任せる（ここで req - gap を再計算すると、
-        // その年が別の同じ科の作付けで塞がっている場合に嘘の年を指す）。
-        remainingYears: result.yearsToWait,
+        // 「いつから置けるか」。避けたい候補が横並びになったとき、
+        // どれが先に空くかを見分けるための年。数え方はエンジンに任せる
+        // （ここで 目安 - 間隔 を再計算すると、その年が別の同じ科の作付けで
+        // 塞がっている場合に、置けない年を指す）。
+        nextPlantableYear: result.nextPlantableYear,
         reason: result.reason,
       },
     });

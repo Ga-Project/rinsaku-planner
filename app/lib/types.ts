@@ -89,15 +89,13 @@ export interface RotationResult {
    * 連作の間隔は時間対称に数えるので、判定年より後の年が入ることがある。
    */
   nearestSameFamilyYear: number | null;
-  /** その年が判定年より前か後か（同年は "past"）。記録が無ければ null。 */
-  direction: "past" | "future" | null;
   /** 判定年とその年の間隔（絶対値）。 */
   gapYears: number | null;
   /**
-   * あと何年あければ避けなくてよくなるか（status が ng のときだけ数値）。
-   * 「その年が別の同じ科の作付けで塞がっていない」ところまで進めて数える。
+   * どの作付けからも目安の年数があく最初の年（status が ng のときだけ数値）。
+   * 塞がっている年は飛ばすので、判定年 + (目安 - 間隔) とは限らない。
    */
-  yearsToWait: number | null;
+  nextPlantableYear: number | null;
   requiredYears: number;
   familyKey: string;
   reason: string;
@@ -127,8 +125,11 @@ export interface Suggestion {
   status: RotationStatus;
   /** 同じ科を植えた（植える予定の）年のうち判定年に最も近いもの（無ければ null）。 */
   nearestSameFamilyYear: number | null;
-  /** あと何年あければ植えられるか（status が ng のときだけ数値、他は null）。 */
-  remainingYears: number | null;
+  /**
+   * どの作付けからも目安の年数があく最初の年（status が ng のときだけ数値）。
+   * 年数ではなく年。`targetYear + n` を計算しないこと。
+   */
+  nextPlantableYear: number | null;
   /** 判定の日本語説明。 */
   reason: string;
 }

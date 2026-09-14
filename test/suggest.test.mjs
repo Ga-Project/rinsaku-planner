@@ -82,7 +82,7 @@ test("同じ科の直近作付けがあけ年数に足りなければ ng にな�
   const byId = Object.fromEntries(out.map((s) => [s.cropId, s]));
 
   assert.equal(byId["aki-nasu"].status, "ng");
-  assert.match(byId["aki-nasu"].reason, /あと2年/);
+  assert.match(byId["aki-nasu"].reason, /2028年からです/);
   // 別の科は影響を受けない
   assert.equal(byId["hakusai"].status, "ok");
 });

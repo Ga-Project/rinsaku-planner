@@ -20,7 +20,7 @@ test("evaluateRotation: 間隔不足は ng（gap < 必要年数）", () => {
   assert.equal(r.status, "ng");
   assert.equal(r.nearestSameFamilyYear, 2024);
   assert.equal(r.gapYears, 2);
-  assert.match(r.reason, /あと2年/);
+  assert.match(r.reason, /2028年からです/);
 });
 
 test("evaluateRotation: 目安ちょうどは caution（gap === 必要年数）", () => {
@@ -58,7 +58,6 @@ test("evaluateRotation: 判定年に最も近い作付けを採る（過去と�
   ];
   const r = evaluateRotation(past, "solanaceae", 4, 2026);
   assert.equal(r.nearestSameFamilyYear, 2027);
-  assert.equal(r.direction, "future");
   assert.equal(r.gapYears, 1);
   assert.equal(r.status, "ng");
 });
@@ -70,11 +69,10 @@ test("evaluateRotation: 間隔が同じ過去と未来が並ぶときは過去�
   ];
   const r = evaluateRotation(past, "solanaceae", 4, 2026);
   assert.equal(r.nearestSameFamilyYear, 2024);
-  assert.equal(r.direction, "past");
   assert.equal(r.gapYears, 2);
 });
 
-test("evaluateRotation: 同科の複数履歴では最も新しい年を採用", () => {
+test("evaluateRotation: 同科の複数履歴では判定年に最も近い年を採用", () => {
   const past = [
     { familyKey: "solanaceae", year: 2020 },
     { familyKey: "solanaceae", year: 2024 },
@@ -104,7 +102,6 @@ test("evaluateRotation: 判定年より後の作付け（予定）も間隔と�
   );
   assert.equal(near.status, "ng", "2年しかあかない予定を見逃している");
   assert.equal(near.nearestSameFamilyYear, 2028);
-  assert.equal(near.direction, "future");
   assert.equal(near.gapYears, 2);
   assert.match(near.reason, /2028年/);
 
@@ -132,9 +129,8 @@ test("evaluateRotation: 説明文が時制を断定しない（過ぎた年を�
     3,
     2023,
   );
-  assert.equal(r.direction, "future", "判定年より後という関係自体は保つ");
-  assert.doesNotMatch(r.reason, /予定/);
-  assert.doesNotMatch(r.reason, /ずらす/);
+  assert.equal(r.nearestSameFamilyYear, 2024, "判定年より後という関係自体は保つ");
+  assert.doesNotMatch(r.reason, /予定|ずらす|植えています|経過して/);
   assert.match(r.reason, /2024年/);
 
   // caution / ok 側も同じ。
@@ -148,7 +144,11 @@ test("evaluateRotation: 説明文が時制を断定しない（過ぎた年を�
       req,
       target,
     );
-    assert.doesNotMatch(x.reason, /予定|ずらす/, `req=${req} で時制を断定している`);
+    assert.doesNotMatch(
+      x.reason,
+      /予定|ずらす|植えています|経過して/,
+      `req=${req} で時制を断定している`,
+    );
   }
 });
 
@@ -163,14 +163,14 @@ test("evaluateRotation: あと◯年が、別の同じ科で塞がった年を�
   ];
   const r = evaluateRotation(past, "solanaceae", 4, 2026);
   assert.equal(r.status, "ng");
-  assert.notEqual(r.yearsToWait, 2, "塞がっている2028年を指している");
+  assert.notEqual(r.nextPlantableYear, 2028, "塞がっている2028年を指している");
   // 指した年が実際に避けなくてよい年であることを、判定を呼び直して確かめる。
-  const at = evaluateRotation(past, "solanaceae", 4, 2026 + r.yearsToWait);
-  assert.notEqual(at.status, "ng", `${2026 + r.yearsToWait}年も避けたい年だった`);
-  assert.match(r.reason, new RegExp(`あと${r.yearsToWait}年`));
+  const at = evaluateRotation(past, "solanaceae", 4, r.nextPlantableYear);
+  assert.notEqual(at.status, "ng", `${r.nextPlantableYear}年も避けたい年だった`);
+  assert.match(r.reason, new RegExp(`${r.nextPlantableYear}年からです`));
   // ひとつ手前の年はまだ避けたい年（最小の年を指している）。
   assert.equal(
-    evaluateRotation(past, "solanaceae", 4, 2026 + r.yearsToWait - 1).status,
+    evaluateRotation(past, "solanaceae", 4, r.nextPlantableYear - 1).status,
     "ng",
     "必要以上に先の年を指している",
   );
@@ -183,10 +183,10 @@ test("evaluateRotation: 単純なケースの『あと◯年』は従来どお�
     4,
     2026,
   );
-  assert.equal(r.yearsToWait, 2);
+  assert.equal(r.nextPlantableYear, 2028);
   assert.equal(
     r.reason,
-    "2024年に同じ科を植えています。あと2年あけるのがおすすめです（目安4年）。",
+    "2024年に同じ科の作付けがあります。どの作付けからも目安の4年あくのは2028年からです。",
   );
 });
 
@@ -204,13 +204,13 @@ test("evaluateRotation: 避けなくてよい判定では あと◯年 を持た
       target,
     );
     assert.notEqual(r.status, "ng");
-    assert.equal(r.yearsToWait, null, `${JSON.stringify(years)} req=${req}`);
+    assert.equal(r.nextPlantableYear, null, `${JSON.stringify(years)} req=${req}`);
   }
 });
 
 // --- 同年（間隔0）の扱い -----------------------------------------------------
 
-test("evaluateRotation: 同年の作付けは past 側として扱う（境界）", () => {
+test("evaluateRotation: 同年の作付けは間隔0の衝突として扱う（境界）", () => {
   const r = evaluateRotation(
     [{ familyKey: "solanaceae", year: 2026 }],
     "solanaceae",
@@ -218,16 +218,12 @@ test("evaluateRotation: 同年の作付けは past 側として扱う（境界�
     2026,
   );
   assert.equal(r.gapYears, 0);
-  assert.equal(
-    r.direction,
-    "past",
-    "同年を future 側に倒すと、済んだ記録の言い方が変わってしまう",
-  );
+  assert.equal(r.nearestSameFamilyYear, 2026);
   assert.equal(r.status, "ng");
-  assert.equal(r.yearsToWait, 4);
+  assert.equal(r.nextPlantableYear, 2030);
   assert.equal(
     r.reason,
-    "2026年に同じ科を植えています。あと4年あけるのがおすすめです（目安4年）。",
+    "2026年に同じ科の作付けがあります。どの作付けからも目安の4年あくのは2030年からです。",
   );
 });
 
@@ -320,12 +316,10 @@ test("bedStatus: 作付け1件だけの区画で『記録はありません』�
   // 画面はこの直前に「すでに記録した作付けの判定 ── 2026年 トマト」と出す。
   assert.equal(r.latestYear, 2026);
   assert.equal(r.status, "ok");
-  assert.equal(r.reason, "この区画にこの科を植えた記録はありません。");
-  assert.doesNotMatch(
-    r.reason,
-    /2026年までに/,
-    "判定対象の作付け自身の年を、履歴の範囲として利用者に見せている",
-  );
+  // 見出し「すでに記録した作付けの判定 ── 2026年 トマト」の直下に出る文なので、
+  // 「記録はありません」と裸で言わない（判定対象の作付け自身は履歴から外している）。
+  assert.equal(r.reason, "前後の年に、同じ科の作付けはほかにありません。");
+  assert.doesNotMatch(r.reason, /2026年までに/);
 });
 
 test("bedStatus: 各分岐の説明文を固定する", () => {
@@ -340,7 +334,7 @@ test("bedStatus: 各分岐の説明文を固定する", () => {
   assert.equal(ng.status, "ng");
   assert.equal(
     ng.reason,
-    "2024年に同じ科を植えています。あと2年あけるのがおすすめです（目安4年）。",
+    "2024年に同じ科の作付けがあります。どの作付けからも目安の4年あくのは2028年からです。",
   );
 
   // caution（目安ちょうど）
@@ -354,7 +348,7 @@ test("bedStatus: 各分岐の説明文を固定する", () => {
   assert.equal(caution.status, "caution");
   assert.equal(
     caution.reason,
-    "前回の同じ科から目安の4年が経過しています。もう1年あけるとより安心です。",
+    "2022年に同じ科の作付けがあります。間隔は目安の4年ちょうどです。",
   );
 
   // ok（十分あいている）
@@ -368,7 +362,7 @@ test("bedStatus: 各分岐の説明文を固定する", () => {
   assert.equal(ok.status, "ok");
   assert.equal(
     ok.reason,
-    "前回の同じ科の作付けから7年あいています（目安4年）。",
+    "2019年に同じ科の作付けがあります。間隔は7年です（目安4年）。",
   );
 
   // 作付けなし / 未知の作物
@@ -391,7 +385,58 @@ test("bedStatus: 判定の基準になる作付け自身より後の記録は基
   );
   assert.equal(r.latestYear, 2030);
   assert.equal(r.nearestSameFamilyYear, 2020);
-  assert.equal(r.direction, "past");
   assert.equal(r.gapYears, 10);
   assert.equal(r.status, "ok");
+});
+
+// --- 対称性そのものを固定する（除外領域を持たない検査） -----------------------
+//
+// この変更の芯は「同じ科を A年 と B年 に置くとき、困るのは両方で、間隔は
+// どちらから見ても同じ」という一点。走査の都合で除外領域を持つ検査
+// （recommendConsistency.test.mjs）とは別に、この性質だけを直接固定する。
+// 片側からしか数えない実装に戻すと、必ずここが落ちる。
+
+test("evaluateRotation: A年からB年を見た判定と、B年からA年を見た判定が一致する", () => {
+  const F = "solanaceae";
+  const bad = [];
+  for (let a = 2020; a <= 2032; a++) {
+    for (let b = 2020; b <= 2032; b++) {
+      for (let req = 0; req <= 6; req++) {
+        const ab = evaluateRotation([{ familyKey: F, year: b }], F, req, a);
+        const ba = evaluateRotation([{ familyKey: F, year: a }], F, req, b);
+        if (ab.status !== ba.status || ab.gapYears !== ba.gapYears) {
+          bad.push(`A=${a} B=${b} req=${req}: ${ab.status}/${ab.gapYears} vs ${ba.status}/${ba.gapYears}`);
+        }
+      }
+    }
+  }
+  assert.deepEqual(bad.slice(0, 10), [], `${bad.length}件で前後が非対称`);
+});
+
+test("evaluateRotation: 同じ間隔なら、どの年を名指ししても判定は変わらない", () => {
+  const F = "solanaceae";
+  // 判定年の前後に等距離で記録がある場合。どちらを採っても status は同じでなければ、
+  // tie-break の選び方が判定を動かしていることになる。
+  for (let req = 1; req <= 6; req++) {
+    for (let d = 0; d <= 8; d++) {
+      const both = evaluateRotation(
+        [
+          { familyKey: F, year: 2026 - d },
+          { familyKey: F, year: 2026 + d },
+        ],
+        F,
+        req,
+        2026,
+      );
+      const onlyPast = evaluateRotation([{ familyKey: F, year: 2026 - d }], F, req, 2026);
+      const onlyFuture = evaluateRotation([{ familyKey: F, year: 2026 + d }], F, req, 2026);
+      assert.equal(both.status, onlyPast.status, `req=${req} d=${d}`);
+      assert.equal(both.status, onlyFuture.status, `req=${req} d=${d}`);
+      assert.equal(
+        both.nearestSameFamilyYear,
+        2026 - d,
+        "同じ間隔なら過去の年を名指しする",
+      );
+    }
+  }
 });

@@ -334,6 +334,9 @@ select:focus {
 .plantnow-title {
   margin: 0;
 }
+.plantnow-scope {
+  margin: var(--sp-1) 0 var(--sp-2);
+}
 .plantnow-lead,
 .plantnow-foot {
   font-size: var(--fs-sm);
