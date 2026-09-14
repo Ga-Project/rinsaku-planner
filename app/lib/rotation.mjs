@@ -17,8 +17,9 @@
 /**
  * @typedef {Object} RotationResult
  * @property {RotationStatus} status 判定
- * @property {number | null} lastSameFamilyYear 同じ科を直近で植えた年（無ければ null）
- * @property {number | null} gapYears targetYear と lastSameFamilyYear の差（無ければ null）
+ * @property {number | null} nearestSameFamilyYear 同じ科を植えた（植える予定の）年のうち targetYear に最も近いもの（無ければ null）
+ * @property {"past" | "future" | null} direction その年が targetYear より前か後か（同年は "past"・無ければ null）
+ * @property {number | null} gapYears targetYear と nearestSameFamilyYear の間隔（絶対値・無ければ null）
  * @property {number} requiredYears その科の推奨間隔（年・0 以上）
  * @property {string} familyKey 判定対象の科
  * @property {string} reason 利用者向けの日本語説明
@@ -27,15 +28,26 @@
 /**
  * 指定の区画に「ある科」を targetYear に植える場合の連作判定を返す。
  *
+ * ■ 間隔は時間対称に数える（ここが判定の芯）
+ *   同じ科を 2026年 と 2027年 に置けば、どちらから見ても間隔は1年で、
+ *   困るのは両方である。したがって過去の作付けだけでなく、**targetYear より
+ *   後に記録されている作付け（翌季の計画）も同じ間隔として数える**。
+ *   年の入力は 1900〜3000 を受けるので、先の季節の計画を入れておくのは
+ *   この製品の正常な使い方であり、それを判定から外すと
+ *     - 2027年にトマトを計画してある区画に、2026年のトマトを「そのまま植えられます」と勧める
+ *     - 記録した瞬間、同じ区画が連作NGに変わる
+ *   という、製品が自分の勧めを自分で否定する状態になる。
+ *
  * ルール:
- *   - requiredYears <= 0 の科は連作障害が出にくい ⇒ 常に ok（直近作付けがあれば reason で補足）。
- *   - 同科の直近作付け年を lastYear、gap = targetYear - lastYear とすると:
+ *   - requiredYears <= 0 の科は連作障害が出にくい ⇒ 常に ok（近い作付けがあれば reason で補足）。
+ *   - 同科の作付けのうち targetYear に最も近いものを取り、gap = |targetYear - その年| とすると:
  *       gap < requiredYears  → ng（避けるべき窓の内側）
  *       gap === requiredYears → caution（目安ちょうど・もう1年で安心）
  *       gap > requiredYears  → ok
+ *   - 間隔が同じ過去と未来が並ぶときは過去を採る（すでに起きた事実を先に言う）。
  *   - 同科の履歴が無ければ ok。
  *
- * @param {PastPlanting[]} past 同じ区画の過去作付け（順不同可）
+ * @param {PastPlanting[]} past 同じ区画の作付け（順不同可・targetYear より後のものを含んでよい）
  * @param {string} familyKey 植えようとする作物の科
  * @param {number} requiredYears その科の推奨間隔（年）。整数・負値は 0 とみなす
  * @param {number} targetYear 植えようとする年
@@ -46,25 +58,28 @@ export function evaluateRotation(past, familyKey, requiredYears, targetYear) {
     Number.isInteger(requiredYears) && requiredYears > 0 ? requiredYears : 0;
   const list = Array.isArray(past) ? past : [];
 
-  let lastYear = null;
-  for (const p of list) {
-    if (
-      p &&
-      p.familyKey === familyKey &&
-      Number.isInteger(p.year) &&
-      Number.isInteger(targetYear) &&
-      // targetYear と同年の同科作付け（別区画記録）も衝突として数える（gap 0）。
-      // 未来年（> targetYear）は無視する。
-      p.year <= targetYear
-    ) {
-      if (lastYear === null || p.year > lastYear) lastYear = p.year;
+  /** @type {{year: number, gap: number} | null} */
+  let nearest = null;
+  if (Number.isInteger(targetYear)) {
+    for (const p of list) {
+      if (!p || p.familyKey !== familyKey || !Number.isInteger(p.year)) continue;
+      const gap = Math.abs(targetYear - p.year);
+      if (
+        nearest === null ||
+        gap < nearest.gap ||
+        // 同じ間隔なら過去を採る。
+        (gap === nearest.gap && p.year <= targetYear && nearest.year > targetYear)
+      ) {
+        nearest = { year: p.year, gap };
+      }
     }
   }
 
-  if (lastYear === null) {
+  if (nearest === null) {
     return {
       status: "ok",
-      lastSameFamilyYear: null,
+      nearestSameFamilyYear: null,
+      direction: null,
       gapYears: null,
       requiredYears: req,
       familyKey,
@@ -72,48 +87,57 @@ export function evaluateRotation(past, familyKey, requiredYears, targetYear) {
     };
   }
 
-  const gap = targetYear - lastYear;
+  const { year, gap } = nearest;
+  // 同年は「すでにそこにある」側として扱う（gap 0 の衝突）。
+  const direction = /** @type {"past" | "future"} */ (
+    year <= targetYear ? "past" : "future"
+  );
+  const base = {
+    nearestSameFamilyYear: year,
+    direction,
+    gapYears: gap,
+    requiredYears: req,
+    familyKey,
+  };
 
   if (req <= 0) {
     return {
-      status: "ok",
-      lastSameFamilyYear: lastYear,
-      gapYears: gap,
+      ...base,
       requiredYears: 0,
-      familyKey,
+      status: "ok",
       reason: "連作障害が出にくい科です。続けて植えても比較的安心です。",
     };
   }
 
   if (gap < req) {
     return {
+      ...base,
       status: "ng",
-      lastSameFamilyYear: lastYear,
-      gapYears: gap,
-      requiredYears: req,
-      familyKey,
-      reason: `${lastYear}年に同じ科を植えています。あと${req - gap}年あけるのがおすすめです（目安${req}年）。`,
+      reason:
+        direction === "past"
+          ? `${year}年に同じ科を植えています。あと${req - gap}年あけるのがおすすめです（目安${req}年）。`
+          : `${year}年に同じ科を植える予定です。間隔が${gap}年しかあかないので、どちらかの年をずらすのがおすすめです（目安${req}年）。`,
     };
   }
 
   if (gap === req) {
     return {
+      ...base,
       status: "caution",
-      lastSameFamilyYear: lastYear,
-      gapYears: gap,
-      requiredYears: req,
-      familyKey,
-      reason: `前回の同じ科から目安の${req}年が経過しています。もう1年あけるとより安心です。`,
+      reason:
+        direction === "past"
+          ? `前回の同じ科から目安の${req}年が経過しています。もう1年あけるとより安心です。`
+          : `${year}年の同じ科の予定まで目安ちょうどの${req}年です。もう1年ずらすとより安心です。`,
     };
   }
 
   return {
+    ...base,
     status: "ok",
-    lastSameFamilyYear: lastYear,
-    gapYears: gap,
-    requiredYears: req,
-    familyKey,
-    reason: `前回の同じ科の作付けから${gap}年あいています（目安${req}年）。`,
+    reason:
+      direction === "past"
+        ? `前回の同じ科の作付けから${gap}年あいています（目安${req}年）。`
+        : `${year}年の同じ科の予定まで${gap}年あります（目安${req}年）。`,
   };
 }
 
@@ -128,7 +152,8 @@ export function evaluateRotation(past, familyKey, requiredYears, targetYear) {
 /**
  * @typedef {Object} BedRotation
  * @property {RotationStatus | "empty"} status 区画の判定（作付けなしは "empty"）
- * @property {number | null} lastSameFamilyYear
+ * @property {number | null} nearestSameFamilyYear
+ * @property {"past" | "future" | null} direction
  * @property {number | null} gapYears
  * @property {number} requiredYears
  * @property {string} familyKey
@@ -155,7 +180,8 @@ export function bedStatus(plantings, cropLookup) {
   if (list.length === 0) {
     return {
       status: "empty",
-      lastSameFamilyYear: null,
+      nearestSameFamilyYear: null,
+      direction: null,
       gapYears: null,
       requiredYears: 0,
       familyKey: "",
@@ -175,7 +201,8 @@ export function bedStatus(plantings, cropLookup) {
   if (!info) {
     return {
       status: "empty",
-      lastSameFamilyYear: null,
+      nearestSameFamilyYear: null,
+      direction: null,
       gapYears: null,
       requiredYears: 0,
       familyKey: "",

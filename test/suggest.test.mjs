@@ -153,7 +153,7 @@ test("年跨ぎの連作判定は翌年で数える（当年で数えると候�
 
   assert.equal(out[0].targetYear, 2027);
   assert.equal(out[0].status, "caution");
-  assert.equal(out[0].lastSameFamilyYear, 2024);
+  assert.equal(out[0].nearestSameFamilyYear, 2024);
 
   const g = groupSuggestions(out);
   assert.deepEqual(

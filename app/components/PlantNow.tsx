@@ -72,9 +72,18 @@ function Group({
                   あと{s.remainingYears}年
                 </span>
               )}
-              {s.remainingYears === null && s.status === "caution" && (
-                <span className="plantnow-chip-note">目安ちょうど</span>
+              {/* 予定との衝突は「あと◯年待てば解ける」形ではない（待つほど
+                  その予定に近づく年もある）ので、年数ではなく事情を出す。 */}
+              {s.remainingYears === null && s.direction === "future" && (
+                <span className="plantnow-chip-note">
+                  {s.nearestSameFamilyYear}年に予定
+                </span>
               )}
+              {s.remainingYears === null &&
+                s.direction !== "future" &&
+                s.status === "caution" && (
+                  <span className="plantnow-chip-note">目安ちょうど</span>
+                )}
             </button>
           </li>
         ))}

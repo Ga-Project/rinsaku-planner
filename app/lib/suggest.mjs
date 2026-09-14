@@ -124,11 +124,16 @@ export function suggestPlantings(plantings, crops, month, year) {
         timing,
         targetYear,
         status: result.status,
-        lastSameFamilyYear: result.lastSameFamilyYear,
+        nearestSameFamilyYear: result.nearestSameFamilyYear,
+        direction: result.direction,
         // 「あと何年あければ植えられるか」。避けたい候補が横並びになったとき、
         // あと1年のものと あと4年のものを見分けるための数字。
+        // 予定との衝突では出さない: 2027年の予定に対して2026年に植えるとき、
+        // 差の 4-1=3 年待っても 2029年で間隔は2年にしかならず、数が嘘になる。
         remainingYears:
-          result.status === "ng" && result.gapYears !== null
+          result.status === "ng" &&
+          result.direction === "past" &&
+          result.gapYears !== null
             ? result.requiredYears - result.gapYears
             : null,
         reason: result.reason,
