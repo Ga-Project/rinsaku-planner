@@ -406,6 +406,9 @@ export function PlannerApp() {
               bed={selectedBed}
               currentYear={now.getFullYear()}
               currentMonth={now.getMonth() + 1}
+              // 野菜ページから来ているなら、その野菜を選んだ状態で開く
+              // （帯の「〜が選ばれた状態で開きます」を実際にそうする）。
+              initialCropId={focusCropId}
               onUpdateBed={(patch) => updateBed(selectedBed.id, patch)}
               onAddPlanting={(cropId, year) =>
                 addPlanting(selectedBed.id, cropId, year)

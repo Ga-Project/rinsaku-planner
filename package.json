@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "lint": "next lint --max-warnings 0",
+    "lint": "next lint --max-warnings 0 && eslint --max-warnings 0 --ext .mjs app scripts test",
     "typecheck": "tsc --noEmit",
     "test": "node --test",
     "verify:export": "node scripts/verify-export.mjs out"

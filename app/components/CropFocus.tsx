@@ -1,7 +1,12 @@
 "use client";
 
 import type { Crop, FocusVerdict, RotationStatus } from "../lib/types";
-import { verdictNote, sameYearNote } from "../lib/cropFocus.mjs";
+import {
+  verdictNote,
+  verdictDetail,
+  sameYearNote,
+  laterNote,
+} from "../lib/cropFocus.mjs";
 import { summarizeMonths } from "../lib/schedule.mjs";
 import { IconCheck, IconWarn, IconStop, IconSeedling, IconPlus } from "./icons";
 
@@ -113,7 +118,7 @@ export function CropFocus({
       <p className="crop-focus-headline">{headline}</p>
       {verdicts.length > 0 ? (
         <p className="crop-focus-hint">
-          区画を選ぶと、その区画の編集に移り、作付けを記録できます。
+          区画を選ぶと、{crop.nameJa}が選ばれた状態でその区画の編集に移ります。
         </p>
       ) : null}
 
@@ -130,6 +135,9 @@ export function CropFocus({
             const m = META[v.status];
             const Icon = m.Icon;
             const note = verdictNote(v);
+            const label = v.label || "区画";
+            const sameYear = sameYearNote(v, targetYear);
+            const later = laterNote(v);
             return (
               <li key={v.bedId}>
                 <button
@@ -137,28 +145,42 @@ export function CropFocus({
                   className={`crop-focus-bed ${m.cls}`}
                   // 単一選択であってトグルではないので aria-current（区画セルと同じ流儀）。
                   aria-current={v.bedId === selectedBedId ? "true" : undefined}
+                  // 名前を制御する（同製品の候補チップと同じ流儀）。与えないと
+                  // 読み上げの名前がチップ内の全テキストの連結になり、区画名・判定・
+                  // 根拠・注記が切れ目なく1つの長い段落として読まれる。
+                  // 目に見せていない根拠（判定エンジンの reason）はここに載せる。
+                  aria-label={[
+                    `${label} — ${crop.nameJa}${m.phrase}`,
+                    v.reason,
+                    sameYear,
+                    later,
+                  ]
+                    .filter(Boolean)
+                    .join(" ")}
                   onClick={() => onSelectBed(v.bedId)}
                 >
                   <span className="crop-focus-bed-head">
                     <Icon />
-                    <span className="crop-focus-bed-label">
-                      {v.label || "区画"}
-                    </span>
+                    <span className="crop-focus-bed-label">{label}</span>
                     {note ? (
                       <span className="crop-focus-bed-note">{note}</span>
                     ) : null}
                   </span>
-                  {/* 判定の言葉と理由は目にも見せる（読み上げにだけ載せない）。 */}
+                  {/* 判定の言葉。あき年数は上のバッジが持つので、ここでは繰り返さない。 */}
                   <span className="crop-focus-bed-verdict">
                     {crop.nameJa}
                     {m.phrase}
                   </span>
-                  <span className="crop-focus-bed-reason">{v.reason}</span>
-                  {/* その年すでに同じ科を記録している場合の注記。判定とは別の情報。 */}
-                  {sameYearNote(v, targetYear) ? (
-                    <span className="crop-focus-bed-record">
-                      {sameYearNote(v, targetYear)}
-                    </span>
+                  {/* 根拠は「いつ・どれだけ・目安いくつ」の事実だけに畳む。 */}
+                  <span className="crop-focus-bed-reason">
+                    {verdictDetail(v)}
+                  </span>
+                  {/* 以下は判定に影響しない注記。判定文とは別の行に置く。 */}
+                  {sameYear ? (
+                    <span className="crop-focus-bed-record">{sameYear}</span>
+                  ) : null}
+                  {later ? (
+                    <span className="crop-focus-bed-record">{later}</span>
                   ) : null}
                 </button>
               </li>

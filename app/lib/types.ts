@@ -119,8 +119,6 @@ export interface Suggestion {
   remainingYears: number | null;
   /** 判定の日本語説明。 */
   reason: string;
-  /** その年すでにこの区画へ記録している同じ科の作付け（判定には影響しない注記）。 */
-  sameYearRecord: { cropId: string; nameJa: string }[];
 }
 
 /** cropFocus が返す1件（「この野菜を植えられるか」を区画ごとに判定したもの）。 */
@@ -136,8 +134,25 @@ export interface FocusVerdict {
   lastSameFamilyYear: number | null;
   /** あと何年あければ植えられるか（status が ng のときだけ数値、他は null）。 */
   remainingYears: number | null;
+  /** その科をあけたい年数（この野菜自身の値）。 */
+  requiredYears: number;
+  /** targetYear と lastSameFamilyYear の差（同科の記録が無ければ null）。 */
+  gapYears: number | null;
   /** 判定の日本語説明。 */
   reason: string;
   /** その年すでにこの区画へ記録している同じ科の作付け（判定には影響しない注記）。 */
-  sameYearRecord: { cropId: string; nameJa: string }[];
+  sameYearRecord: FocusRecord[];
+  /**
+   * targetYear より後の年で記録している同じ科の作付け（判定には影響しない注記）。
+   * 判定は targetYear までの履歴しか見ないので、これを持たないと
+   * 「記録はありません」と言いながらグリッドには翌年の作付けが出ている状態になる。
+   */
+  laterRecord: FocusRecord[];
+}
+
+/** 注記に出す「いつ・何を記録しているか」。 */
+export interface FocusRecord {
+  cropId: string;
+  nameJa: string;
+  year: number;
 }

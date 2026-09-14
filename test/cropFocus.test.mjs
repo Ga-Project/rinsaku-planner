@@ -20,7 +20,9 @@ import {
   hrefWithoutCrop,
   focusBedVerdicts,
   verdictNote,
+  verdictDetail,
   sameYearNote,
+  laterNote,
   summarizeFocus,
 } from "../app/lib/cropFocus.mjs";
 import { bedStatus } from "../app/lib/rotation.mjs";
@@ -178,7 +180,9 @@ test("その年すでに同じ科を記録していても、判定は書き換�
   );
   assert.equal(v.status, judged.status);
   assert.equal(v.remainingYears, judged.requiredYears - judged.gapYears); // 「あと◯年」を握り潰さない
-  assert.deepEqual(v.sameYearRecord, [{ cropId: "tomato", nameJa: "トマト" }]);
+  assert.deepEqual(v.sameYearRecord, [
+    { cropId: "tomato", nameJa: "トマト", year: BASE_YEAR },
+  ]);
   assert.equal(sameYearNote(v, BASE_YEAR), `${BASE_YEAR}年はこの区画にトマトを記録しています。`);
 
   // 同じ科の「別の作物」を記録している区画: 記録したのはナスであってトマトではない。
@@ -186,7 +190,9 @@ test("その年すでに同じ科を記録していても、判定は書き換�
     [bed("b2", [{ cropId: "eggplant", year: BASE_YEAR }])],
     tomato, cropById, BASE_YEAR,
   );
-  assert.deepEqual(w.sameYearRecord, [{ cropId: "eggplant", nameJa: "ナス" }]);
+  assert.deepEqual(w.sameYearRecord, [
+    { cropId: "eggplant", nameJa: "ナス", year: BASE_YEAR },
+  ]);
   assert.equal(sameYearNote(w, BASE_YEAR), `${BASE_YEAR}年はこの区画にナスを記録しています。`);
   assert.doesNotMatch(sameYearNote(w, BASE_YEAR), /トマト/);
 
@@ -209,7 +215,9 @@ test("あけ年数0の科は、同年に記録があっても植えられる区�
   assert.equal(v.status, "ok", "追い蒔きできる区画を落としている");
   assert.equal(verdictNote(v), "");
   // 記録があることは注記としては出す
-  assert.deepEqual(v.sameYearRecord, [{ cropId: "green-onion", nameJa: "ネギ" }]);
+  assert.deepEqual(v.sameYearRecord, [
+    { cropId: "green-onion", nameJa: "ネギ", year: BASE_YEAR },
+  ]);
 });
 
 test("あと何年あければよいかを ng の区画にだけ持たせる（判定エンジンと突合）", () => {
@@ -277,25 +285,60 @@ test("壊れた入力では空の一覧を返す（画面に出す前に落ち�
 // --- 見出し ----------------------------------------------------------------
 
 test("見出しは caution を ok に吸収しない（ok が1つでもある場合を含む）", () => {
-  // ok があっても caution は別に数えて別に言う（前回ここが吸収されていた）
+  // ok があっても caution は別に数えて別に言う
   assert.equal(
     summarizeFocus([{ status: "ok" }, { status: "caution" }], "トマト").headline,
-    "2区画のうち、1区画にそのまま、1区画は間隔に注意してトマトを植えられます。",
-  );
-  assert.equal(
-    summarizeFocus([{ status: "ok" }, { status: "ok" }, { status: "caution" }], "トマト").headline,
-    "3区画のうち、2区画にそのまま、1区画は間隔に注意してトマトを植えられます。",
-  );
-  // 全部 caution
-  assert.equal(
-    summarizeFocus([{ status: "caution" }, { status: "caution" }], "ナス").headline,
-    "2区画のうち、2区画は間隔に注意してナスを植えられます。",
+    "トマトを植えるなら、2区画のうちそのまま植えられる区画が1区画、間隔に注意すれば植えられる区画が1区画です。",
   );
   // ok だけのときだけ「すべてに」と言う
   assert.equal(
     summarizeFocus([{ status: "ok" }, { status: "ok" }], "ナス").headline,
     "2区画すべてにナスを植えられます。",
   );
+});
+
+test("見出しは避けたい区画の数を落とさない", () => {
+  // 「植えられる」側だけ言うと、避けたい区画があること自体が見出しから消える。
+  const h = summarizeFocus(
+    [{ status: "ok" }, { status: "ng" }, { status: "ng" }],
+    "ナス",
+  ).headline;
+  assert.match(h, /いまは避けたい区画が2区画/);
+});
+
+test("見出しは「◯区画のうち◯区画」と言わない（群が1つのとき）", () => {
+  // 群が1つしか無いのに「のうち」で受けると、何も絞っていない文になる
+  // （例: 「3区画のうち、3区画は間隔に注意して…」）。
+  for (const [n, name, expected] of [
+    [2, "ナス", "2区画すべて、間隔に注意すればナスを植えられます。"],
+    [3, "ナス", "3区画すべて、間隔に注意すればナスを植えられます。"],
+  ]) {
+    const h = summarizeFocus(
+      Array.from({ length: n }, () => ({ status: "caution" })),
+      name,
+    ).headline;
+    assert.equal(h, expected);
+    assert.doesNotMatch(h, /のうち/);
+  }
+});
+
+test("区画が1つのときは「1区画すべて」と言わない", () => {
+  assert.equal(
+    summarizeFocus([{ status: "ok" }], "ナス").headline,
+    "この区画にナスを植えられます。",
+  );
+  assert.equal(
+    summarizeFocus([{ status: "caution" }], "ナス").headline,
+    "この区画は、間隔に注意すればナスを植えられます。",
+  );
+});
+
+test("見出しに助詞の衝突（「◯区画に」と「◯区画は」の並び）を残さない", () => {
+  const h = summarizeFocus(
+    [{ status: "ok" }, { status: "caution" }],
+    "トマト",
+  ).headline;
+  assert.doesNotMatch(h, /1区画に.*1区画は/);
 });
 
 test("区画が無いとき・どこにも植えられないときで見出しを変える", () => {
@@ -315,4 +358,130 @@ test("数え上げは要素が壊れていても落ちない（防御の非対�
   }
   assert.equal(summarizeFocus([{ status: "ok" }, null], "トマト").ok, 1);
   assert.equal(verdictNote(null), "");
+});
+
+// --- 年の扱い（注記は「その年」だけ・未来年は判定に入れずに必ず言う） ----------
+
+test("同じ科でも、その年でない記録は『その年の記録』にしない", () => {
+  // 年を見ない実装に退行しても他の検査は全部通るため、ここで年の条件だけを固定する。
+  // 退行すると「前年の記録」を「今年この区画に記録しています」と言うことになる。
+  const tomato = cropById("tomato");
+  const [v] = focusBedVerdicts(
+    [bed("b1", [{ cropId: "tomato", year: BASE_YEAR - 1 }])],
+    tomato,
+    cropById,
+    BASE_YEAR,
+  );
+  assert.deepEqual(v.sameYearRecord, [], "前年の記録を『その年』に数えている");
+  assert.equal(sameYearNote(v, BASE_YEAR), "");
+  // 判定そのものには前年の記録が効いている（注記と判定を取り違えていない）。
+  assert.equal(v.status, "ng");
+  assert.equal(v.lastSameFamilyYear, BASE_YEAR - 1);
+});
+
+test("翌年以降に記録している同じ科は、判定には入れずに必ず注記へ出す", () => {
+  // 年の入力は 1900〜3000 を受けるので、翌季の計画を先に入れるのは正常な使い方。
+  // 判定（evaluateRotation）は targetYear までの履歴しか見ない仕様なので、
+  // ここを拾わないと、グリッドが「トマト（2030）」と出している区画について
+  // 帯が「記録はありません」と言い切ることになる。
+  const tomato = cropById("tomato");
+  const [v] = focusBedVerdicts(
+    [bed("b1", [{ cropId: "tomato", year: BASE_YEAR + 4 }])],
+    tomato,
+    cropById,
+    BASE_YEAR,
+  );
+
+  // 判定は変えない（この製品の判定は targetYear までの履歴で行う）。
+  assert.equal(v.status, "ok");
+  assert.equal(v.lastSameFamilyYear, null);
+
+  // 記録があること自体は必ず言う。
+  assert.deepEqual(v.laterRecord, [
+    { cropId: "tomato", nameJa: "トマト", year: BASE_YEAR + 4 },
+  ]);
+  const note = laterNote(v);
+  assert.match(note, /2030年にトマト/);
+  assert.match(note, /この判定には含めていません/);
+
+  // 「記録はありません」と裸で言い切らない（判定の範囲を必ず添える）。
+  assert.match(v.reason, new RegExp(`${BASE_YEAR}年までに`));
+  assert.match(verdictDetail(v), new RegExp(`${BASE_YEAR}年までに`));
+});
+
+test("翌年以降の記録は、年の早い順に・別の科は混ぜずに並べる", () => {
+  const tomato = cropById("tomato");
+  const [v] = focusBedVerdicts(
+    [
+      bed("b1", [
+        { cropId: "eggplant", year: BASE_YEAR + 5 },
+        { cropId: "cabbage", year: BASE_YEAR + 1 }, // 別の科は出さない
+        { cropId: "tomato", year: BASE_YEAR + 2 },
+      ]),
+    ],
+    tomato,
+    cropById,
+    BASE_YEAR,
+  );
+  assert.deepEqual(
+    v.laterRecord.map((r) => [r.year, r.nameJa]),
+    [
+      [BASE_YEAR + 2, "トマト"],
+      [BASE_YEAR + 5, "ナス"],
+    ],
+  );
+  assert.doesNotMatch(laterNote(v), /キャベツ/);
+});
+
+test("翌年以降の記録が無ければ注記は出ない", () => {
+  const tomato = cropById("tomato");
+  const [v] = focusBedVerdicts(
+    [bed("b1", [{ cropId: "tomato", year: BASE_YEAR - 6 }])],
+    tomato,
+    cropById,
+    BASE_YEAR,
+  );
+  assert.deepEqual(v.laterRecord, []);
+  assert.equal(laterNote(v), "");
+  assert.equal(laterNote(null), "");
+});
+
+// --- チップの1行説明 --------------------------------------------------------
+
+test("チップの説明は、あき年数を1枚の中で二度言わない", () => {
+  // 「あと◯年」はバッジ（verdictNote）が持つ。説明が同じ数をもう一度言うと、
+  // 同じ1件の作付けを2文が繰り返し、狭い画面でグリッドが押し出される。
+  const tomato = cropById("tomato");
+  const [v] = focusBedVerdicts(
+    [bed("b1", [{ cropId: "tomato", year: BASE_YEAR - 2 }])],
+    tomato,
+    cropById,
+    BASE_YEAR,
+  );
+  const badge = verdictNote(v); // 「あと2年」
+  assert.equal(badge, `あと${v.remainingYears}年`);
+  assert.doesNotMatch(
+    verdictDetail(v),
+    new RegExp(`あと${v.remainingYears}年`),
+    "バッジと説明が同じ数を繰り返している",
+  );
+  // 説明は「いつ・目安いくつ」の事実を持つ。
+  assert.match(verdictDetail(v), new RegExp(`${BASE_YEAR - 2}年`));
+  assert.match(verdictDetail(v), new RegExp(`目安${v.requiredYears}年`));
+});
+
+test("チップの説明は、あけ年数0の科では年数の話をしない", () => {
+  const chive = cropById("chinese-chive");
+  const [v] = focusBedVerdicts(
+    [bed("b1", [{ cropId: "green-onion", year: BASE_YEAR }])],
+    chive,
+    cropById,
+    BASE_YEAR,
+  );
+  assert.equal(verdictDetail(v), "続けて植えやすい科です");
+});
+
+test("チップの説明は壊れた入力でも落ちない", () => {
+  assert.equal(verdictDetail(null), "");
+  assert.doesNotThrow(() => verdictDetail({ requiredYears: 4 }));
 });

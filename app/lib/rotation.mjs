@@ -68,7 +68,10 @@ export function evaluateRotation(past, familyKey, requiredYears, targetYear) {
       gapYears: null,
       requiredYears: req,
       familyKey,
-      reason: "この区画にこの科を植えた記録はありません。",
+      // 「記録はありません」と裸で言い切らない。この関数は targetYear までの
+      // 履歴しか見ないので（未来年は無視する）、翌年以降の作付けを記録している
+      // 区画に対して無条件に言うと、画面の別の場所が出している記録と食い違う。
+      reason: `${targetYear}年までに、この区画にこの科を植えた記録はありません。`,
     };
   }
 

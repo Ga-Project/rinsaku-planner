@@ -63,10 +63,14 @@ jobs:
       - run: pnpm lint
       - run: pnpm test
 
+  # PR でもビルドと書き出し検査まで走らせる。
+  # canonical / og:image / basePath / 404 の導線 / sitemap は「ビルドを通したあと」に
+  # しか現れない性質で、ユニットテストは1件も反応しない。ここを main への push 限定に
+  # していたので、レビュー時点では全ゲートが緑のまま、書き出しの退行だけがマージ後に
+  # 初めて落ちる状態になっていた。公開（deploy）だけを push 限定にする。
   build:
     name: Build (static export)
     needs: [secret-scan, checks] # 双方の通過が前提。fail 時は skip され公開されない。
-    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -94,6 +98,8 @@ jobs:
   deploy:
     name: Deploy
     needs: build
+    # 公開そのものは main への push のときだけ。PR は検査までで止める。
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     permissions:
       contents: read

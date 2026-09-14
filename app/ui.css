@@ -1506,9 +1506,13 @@ a.crop-chip:hover {
   color: var(--text-soft);
   line-height: 1.4;
 }
-/* その年すでに記録している同じ科の注記。判定ではないので語調を分ける。 */
+/* 判定に影響しない注記（その年の記録・翌年以降の予定）。
+   判定ではないので、判定文より目立たせない。太字で差をつけると
+   チップの中で注記がいちばん強い行になり、読む順が逆になる。
+   区別は「字を太くする」ではなく「縦罫で段を落とす」で付ける。 */
 .crop-focus-bed-record {
-  font-weight: var(--fw-bold);
+  padding-left: var(--sp-2);
+  border-left: 2px solid currentColor;
 }
 .crop-focus-hint {
   margin: var(--sp-1) 0 0;

@@ -15,6 +15,7 @@ export function BedEditor({
   bed,
   currentYear,
   currentMonth,
+  initialCropId,
   onUpdateBed,
   onAddPlanting,
   onRemovePlanting,
@@ -23,12 +24,22 @@ export function BedEditor({
   bed: Bed;
   currentYear: number;
   currentMonth: number;
+  /**
+   * 追加フォームであらかじめ選んでおく作物。
+   *
+   * 野菜ページから「この野菜を植えたい」を持って来た人は、帯で区画を選んだあと
+   * ここで同じ野菜を59件の中から選び直していた。帯は「区画を選ぶと、その野菜が
+   * 選ばれた状態で開きます」と言っているので、言葉どおりに開く。
+   * 選ぶだけで記録はしない（記録は「追加」を押したときだけ）。
+   */
+  initialCropId?: string | null;
   onUpdateBed: (patch: Partial<Pick<Bed, "label" | "kind">>) => void;
   onAddPlanting: (cropId: string, year: number) => void;
   onRemovePlanting: (plantingId: string) => void;
   onDeleteBed: () => void;
 }) {
-  const [cropId, setCropId] = useState("");
+  // 区画ごとに key で作り直されるので、初期値はマウント時の1回だけ効く。
+  const [cropId, setCropId] = useState(initialCropId ?? "");
   // 空文字を許容して、年をバックスペースで消して入力し直せるようにする。
   // 追加・プレビュー時のみ currentYear を既定値として適用する。
   const [year, setYear] = useState<number | "">(currentYear);
