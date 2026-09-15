@@ -296,6 +296,13 @@ select:focus {
   border: 1px solid var(--border);
   background: var(--surface);
 }
+/* 判定できない状態。危険でも安全でもないので、セマンティック色は当てず
+   沈み面で「情報が足りない」ことを示す。形と文言は他の状態と同じ枠に乗せる。 */
+.verdict.is-unknown {
+  background: var(--surface-sunken);
+  border-color: var(--border-strong);
+  color: var(--text);
+}
 .verdict svg {
   width: 18px;
   height: 18px;

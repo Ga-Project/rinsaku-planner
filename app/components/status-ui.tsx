@@ -2,7 +2,7 @@
 import type { RotationStatus } from "../lib/types";
 import { IconStop, IconWarn, IconCheck, IconDashed } from "./icons";
 
-type AnyStatus = RotationStatus | "empty";
+type AnyStatus = RotationStatus | "empty" | "unknown";
 
 interface Meta {
   label: string;
@@ -15,6 +15,9 @@ const META: Record<AnyStatus, Meta> = {
   caution: { label: "間隔に注意", cls: "is-caution", Icon: IconWarn },
   ok: { label: "植え付けOK", cls: "is-ok", Icon: IconCheck },
   empty: { label: "未設定", cls: "is-empty", Icon: IconDashed },
+  // 作付けはあるが、作物が一覧に無くて判定できない状態。「未設定」と名乗ると
+  // 「記録が1件ある」ことと矛盾するので別の状態として持つ。
+  unknown: { label: "判定できません", cls: "is-unknown", Icon: IconDashed },
 };
 
 /** 区画セルに出す小さなステートバッジ。 */

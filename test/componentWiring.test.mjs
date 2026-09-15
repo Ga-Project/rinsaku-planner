@@ -23,6 +23,7 @@ import { mkdirSync, readFileSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import ts from "typescript";
+import { CROPS } from "../app/lib/crops.mjs";
 import { renderToStaticMarkup } from "react-dom/server";
 import { createElement as h } from "react";
 
@@ -83,9 +84,23 @@ function render(plantings, { currentYear = 2026, currentMonth = 9 } = {}) {
 }
 
 /** クラス名で段落のテキストを取り出す。 */
+/**
+ * 段落のテキストを取り出す。`cls` は class 属性の**完全一致**で指定する
+ * （前方一致にすると "verdict is-ok" を探したつもりで "verdict is-unknown" を
+ *  拾うなど、状態が増えたときに別の段落を見てしまう）。
+ */
 function textOf(html, cls) {
-  const m = html.match(new RegExp(`<p class="${cls}[^"]*"[^>]*>(.*?)</p>`, "s"));
+  const m = html.match(new RegExp(`<p class="${cls}"[^>]*>(.*?)</p>`, "s"));
   return m ? m[1].replace(/<[^>]+>/g, "").trim() : null;
+}
+
+/** 判定バナー（ok / caution / ng のいずれか1つ）の本文。 */
+function verdictText(html) {
+  for (const st of ["is-ok", "is-caution", "is-ng"]) {
+    const t = textOf(html, `verdict ${st}`);
+    if (t !== null) return t;
+  }
+  return null;
 }
 
 test("区画バナーに、判定した年と作物を主語にした文が実際に描かれる", () => {
@@ -97,19 +112,23 @@ test("区画バナーに、判定した年と作物を主語にした文が実�
   assert.match(textOf(html, "muted verdict-scope"), /2027年 トマト/);
   // 本文は空でない完全な文であること（中身を落とす退行をここで捕まえる）。
   assert.equal(
-    textOf(html, "verdict"),
-    "2026年に同じ科の作付けがあります。間隔は1年で、トマトの目安4年に足りません。いまある記録のままだと、どの作付けからも4年あくのは早くて2031年です。",
+    verdictText(html),
+    "この2027年のトマトから見ると、2026年に同じ科の作付けがあります。間隔は1年で、トマトの目安4年に足りません。いまある記録のままだと、どの作付けからも4年あくのは早くて2031年です。",
   );
 });
 
 test("バナーの判定年は最新作付けの年で、閲覧年ではない", () => {
   // 同じ区画を別の年から見ても、判定そのものは動かない。
-  const a = textOf(render([{ cropId: "tomato", year: 2024 }, { cropId: "tomato", year: 2026 }], { currentYear: 2026 }), "verdict");
-  const b = textOf(render([{ cropId: "tomato", year: 2024 }, { cropId: "tomato", year: 2026 }], { currentYear: 2028 }), "verdict");
+  const a = verdictText(render([{ cropId: "tomato", year: 2024 }, { cropId: "tomato", year: 2026 }], { currentYear: 2026 }));
+  const b = verdictText(render([{ cropId: "tomato", year: 2024 }, { cropId: "tomato", year: 2026 }], { currentYear: 2028 }));
   for (const t of [a, b]) {
-    assert.match(t, /^2024年に同じ科の作付けがあります。間隔は2年で、トマトの目安4年に足りません。/);
+    assert.match(
+      t,
+      /^この2026年のトマトから見ると、2024年に同じ科の作付けがあります。間隔は2年で、トマトの目安4年に足りません。/,
+    );
   }
-  // 暦が進むと締めだけが変わる（置ける年が来ていないか、過ぎたか）。
+  // 置ける年（2030年）がどちらの視点からもまだ来ていないので、締めも同じ。
+  // バナーが閲覧年で揺れないことをここで固定する。
   assert.match(a, /早くて2030年です。$/);
   assert.match(b, /早くて2030年です。$/);
 });
@@ -128,7 +147,7 @@ test("候補チップは、その候補自身の作物名と目安年数で語�
   assert.ok(potato, "ジャガイモの候補が描かれていない");
   // 同じパネルでバナーは「トマトの目安4年」、チップは「ジャガイモの目安3年」。
   assert.match(potato, /ジャガイモの目安3年/);
-  assert.match(textOf(html, "verdict"), /トマトの目安4年/);
+  assert.match(verdictText(html), /トマトの目安4年/);
   // チップに、チップからは実行できない助言（判定年をずらす）を出さない。
   assert.doesNotMatch(potato, /どちらかをずらす/);
 });
@@ -159,16 +178,38 @@ test("チップが名乗る年は、その候補を植えることになる年�
   assert.ok(potato, "ジャガイモの候補が描かれていない");
   assert.match(
     potato,
-    /2026年には、同じ科の作付けがもう1件あります。/,
+    /2026年には、同じ科の作付けがほかにもあります。/,
     `チップが植える年と違う年を名乗っている: ${potato}`,
   );
+});
+
+test("チップの可視ラベルは、作物マスタの科名をそのまま出す", () => {
+  // この層は tsc / lint / lib のテストのどれからも見えない。可視ラベルを
+  // 黙って差し替える・切り詰める変更をここで捕まえる。
+  const html = render([], { currentMonth: 8 });
+  const families = [
+    ...html.matchAll(/<span class="plantnow-chip-family">([^<]*)<\/span>/g),
+  ].map((m) => m[1]);
+  assert.ok(families.length > 0, "チップが描かれていない");
+  const known = new Set(CROPS.map((c) => c.familyJa));
+  for (const f of families) {
+    assert.ok(known.has(f), `マスタに無い科名が描かれている: ${f}`);
+  }
+  // 括弧付きの科がフル表記で出ること（短縮を入れるなら仕様として決め直す）。
+  const negi = CROPS.find((c) => c.id === "negi");
+  if (negi && [...html.matchAll(/aria-label="([^"]*)"/g)].some((m) => m[1].startsWith("ネギ"))) {
+    assert.ok(
+      families.includes(negi.familyJa),
+      `科名が切り詰められている: ${negi.familyJa} が無い`,
+    );
+  }
 });
 
 test("作物マスタに無い作付けは、理由を画面に出す", () => {
   const html = render([{ cropId: "not-a-crop", year: 2026 }]);
   assert.match(
-    textOf(html, "verdict is-empty"),
-    /2026年の作付けの作物が一覧にないため、この区画は判定できません。/,
+    textOf(html, "verdict is-unknown"),
+    /2026年の作付けの作物が一覧にないため、この区画は判定できません。下の「作付けの記録」でその行を削除し、作物をえらび直して追加してください。/,
   );
 });
 

@@ -1,4 +1,6 @@
-// 畑めぐり（rinsaku-planner）— 連作判定の文面を組み立てる唯一の場所。
+// 畑めぐり（rinsaku-planner）— 区画パネルの view-model。
+// 判定そのものは rotation.mjs / suggest.mjs が行い、ここはその結果を集めて
+// 「画面に出る文」を組み立てる。判定文の文面はこのファイルだけが持つ。
 //
 // ■ なぜ判定エンジンから文を分けるか
 //   文に必要な「作物名」と「暦の今日」を evaluateRotation() は構造上持てない
@@ -41,9 +43,10 @@ import { suggestPlantings, groupSuggestions } from "./suggest.mjs";
  * @type {Record<"bed" | "chip" | "preview", {empty: string, here: string}>}
  */
 const FACES = {
-  // 区画バナー。判定対象の作付け自身が下の一覧に並んでいるので「ほかに」が要る。
+  // 区画バナー。同科が判定対象の1件だけのときは専用の文を出すので、
+  // 「記録なし」の文はこの面では使わない（区画全体についての全称否定になるため）。
   bed: {
-    empty: "前後の年に、同じ科の作付けはほかにありません。",
+    empty: null,
     here: "下の「いま植えるなら」",
   },
   // 候補チップ。判定年は必ず今年か翌年なので、過ぎた年の分岐は起きない
@@ -73,6 +76,7 @@ const FACES = {
  * @param {number} ctx.judgedYear 判定した年
  * @param {number} ctx.currentYear 暦の今年（過ぎた年かどうかの判定にだけ使う）
  * @param {"bed" | "chip" | "preview"} ctx.face どの面に出すか
+ * @param {number} [ctx.sameFamilyCount] 区画の同じ科の作付け件数（bed 面でのみ使う）
  * @returns {string}
  */
 export function rotationSentence(facts, ctx) {
@@ -85,9 +89,19 @@ export function rotationSentence(facts, ctx) {
     return `${ctx.cropName}は、間隔をあけずに続けて植えやすい野菜です。`;
   }
 
+  // ■ バナーは判定対象の作付けを必ず基準点として名乗る
+  //   バナーだけが判定対象自身を履歴から外して数えるので、区画全体について
+  //   全称的に語ると、同じ記録を数に入れる候補チップと真っ向から食い違う。
+  //   （実測: 全称否定「ほかにありません」と、同じ記録を名指しするチップの同居が
+  //    11,800パネル。基準点を名乗らない「間隔は◯年」の衝突が232パネル。）
+  if (ctx.face === "bed" && ctx.sameFamilyCount === 1) {
+    return `この区画に記録した同じ科の作付けは、この${ctx.judgedYear}年の${ctx.cropName}1件だけです。この作付けは連作になっていません。`;
+  }
+
   const near = facts.nearestSameFamilyYear;
   if (near === null || facts.gapYears === null || facts.conflictSide === null) {
-    return face.empty;
+    // bed 面はここに来ない（同科は必ず判定対象自身を含む）。来たら実装の誤り。
+    return face.empty ?? "";
   }
 
   const gap = facts.gapYears;
@@ -95,27 +109,40 @@ export function rotationSentence(facts, ctx) {
 
   // 〔1〕何と近いか。年の入力は過去も未来も受けるので、ここでは時制語を使わない
   //      （「予定」「済み」は判定年より後の記録に対して嘘になる）。時制は〔3〕だけが扱う。
+  // 「もう1件」は件数の断定で、同じ年に同科が3件ある区画では実数と食い違う
+  //（同じパネルの「作付けの記録」で数えて反証できる）。「ほかにも」は1件でも
+  // 複数でも真で、「判定対象以外に」という含意も保つ。
   const slot1 =
     side === "same"
-      ? `${ctx.judgedYear}年には、同じ科の作付けがもう1件あります。`
+      ? `${ctx.judgedYear}年には、同じ科の作付けがほかにもあります。`
       : `${near}年に同じ科の作付けがあります。`;
+
+  // B: バナーで同科が2件以上あるとき、どの作付けから見た間隔なのかを先に名乗る。
+  //    同年重複（same）は両面とも間隔0で一致するので前置は要らない。
+  const basis =
+    ctx.face === "bed" && side !== "same"
+      ? `この${ctx.judgedYear}年の${ctx.cropName}から見ると、`
+      : "";
 
   // 〔2〕目安との照合。年数は必ず作物名を主語に付けて名乗る。
   //      caution で数字を1つにするのは、gap === req のとき同じ数を2回書くと
   //      トートロジーになるため（「4年＝その作物の目安」と読めるので検算は成立する）。
+  // 同じ年に同じ科がもう1件あるとき「間隔は0年で」と続けるのは、直前の
+  // スロット1で言った事実の言い直しになる。畑の文脈で「0年の間隔」とも言わない。
+  const gapPhrase = side === "same" ? "間隔があかないので" : `間隔は${gap}年で`;
   const slot2 =
     facts.status === "ok"
       ? `間隔は${gap}年あり、${ctx.cropName}の目安${req}年をこえています。`
       : facts.status === "caution"
-        ? `間隔は${gap}年で、${ctx.cropName}の目安ちょうどです。`
-        : `間隔は${gap}年で、${ctx.cropName}の目安${req}年に足りません。`;
+        ? `${gapPhrase}、${ctx.cropName}の目安ちょうどです。`
+        : `${gapPhrase}、${ctx.cropName}の目安${req}年に足りません。`;
 
   // 〔3〕締め。ok / caution では出さない。
   //      caution に助言を足すと、衝突相手が判定年より後にあるとき
   //      「もう1年あける」が必ず逆向きになる（間隔が縮んで ng に落ちる）。
-  if (facts.status !== "ng") return slot1 + slot2;
+  if (facts.status !== "ng") return basis + slot1 + slot2;
 
-  return slot1 + slot2 + closing(facts, ctx, near, req, face.here);
+  return basis + slot1 + slot2 + closing(facts, ctx, near, req, face.here);
 }
 
 /**
@@ -123,7 +150,11 @@ export function rotationSentence(facts, ctx) {
  * だけを名指しする。レバーは上から順に:
  *
  *   1. 衝突相手（未来の計画）をずらす … side === "after"。待つより安い
- *   2. 判定年をずらす                 … その面で判定年が編集できる（bed / preview）
+ *   2. 判定年をずらす                 … side === "after" かつ その面で判定年が編集
+ *                                        できる（bed / preview）。before/same では
+ *                                        「判定年を後ろへずらす」と「置ける年まで
+ *                                        待つ」の行き先が同じなので、レバー3の文が
+ *                                        そのまま到達点を名指ししている
  *   3. 置ける年まで待つ               … side !== "after" かつ 今年 < next <= MAX_YEAR
  *   0. どれも立たない                 … 助言を出さず、次に答えが出る場所へ送る
  *
@@ -146,7 +177,7 @@ function closing(facts, ctx, near, req, here) {
 
   if (facts.conflictSide === "after") {
     // 名指しした2つの年が両方とも過去。動かせるものがない。
-    if (past && near < ctx.currentYear) return noLeverAdvice(here);
+    if (past && near < ctx.currentYear) return noLeverAdvice(here, judged, near);
     // 判定年は動かせないが、衝突年は未来の計画なので動かせる。
     if (past) {
       return `${judged}年はもう過ぎているので、間隔をあけるなら${near}年の作付けをずらすことになります。`;
@@ -154,7 +185,14 @@ function closing(facts, ctx, near, req, here) {
     // チップの年は暦が決める＝動かせない。かつ判定年の作付けはまだ存在しない。
     // 動かせるのは衝突年の記録だけなので、手の届く場所を名指しする。
     if (ctx.face === "chip") {
-      return `間隔をあけるには、下の「作付けの記録」で${near}年の作付けをずらすことになります。`;
+      // チップには補助ラベルで「空く年」が出ている。文が「ずらす」しか言わないと、
+      // 目で読む人は「待て」、読み上げの人は「ずらせ」と別の助言を受け取る。
+      // 2択を同じ順序（安い順）で両方載せて、視覚と読み上げを一致させる。
+      const waitPart =
+        facts.nextPlantableYear !== null && facts.nextPlantableYear <= MAX_YEAR
+          ? `か、${facts.nextPlantableYear}年まで待つ`
+          : "";
+      return `間隔をあけるには、下の「作付けの記録」で${near}年の作付けをずらす${waitPart}ことになります。`;
     }
     // 判定年も衝突年も編集できる。両端どちらを動かしてもよい。
     return `間隔をあけるには、${judged}年か${near}年のどちらかをずらすことになります。`;
@@ -162,7 +200,7 @@ function closing(facts, ctx, near, req, here) {
 
   // side が before / same。待てば実行できるかどうかだけで決まる。
   const next = facts.nextPlantableYear;
-  if (next === null) return noLeverAdvice(here);
+  if (next === null) return noLeverAdvice(here, judged, near);
   if (next > MAX_YEAR) {
     // 記録できない年は名指ししない。「{判定年}年より後で」を必ず付ける
     // （付けないと、判定年より前の年で成立しうるので嘘になる）。
@@ -175,7 +213,7 @@ function closing(facts, ctx, near, req, here) {
     // 「{next}年からです」とは書かない。next の後ろが塞がっている配置が実在する。
     return `いまある記録のままだと、どの作付けからも${req}年あくのは早くて${next}年です。`;
   }
-  return noLeverAdvice(here);
+  return noLeverAdvice(here, judged, near);
 }
 
 /**
@@ -189,8 +227,14 @@ function closing(facts, ctx, near, req, here) {
  *
  * @param {string} here
  */
-function noLeverAdvice(here) {
-  return `どちらも過ぎた年のことなので、これから植えるものは${here}で確かめてください。`;
+function noLeverAdvice(here, judged, near) {
+  // 「どちらも」と言うなら、その2つが文の中に無いと読み手が確定できない。
+  // 判定年は小見出しや入力欄まで視線を戻さないと分からない位置にある。
+  const subject =
+    judged === near
+      ? `${judged}年のことはもう過ぎている`
+      : `${judged}年も${near}年ももう過ぎている`;
+  return `${subject}ので、これから植えるものは${here}で確かめてください。`;
 }
 
 /**
@@ -230,7 +274,9 @@ export function rotationChipNote(facts) {
  * @param {number} year 判定できなかった作付けの年
  */
 export function unknownCropText(year) {
-  return `${year}年の作付けの作物が一覧にないため、この区画は判定できません。下の「作付けの記録」で登録し直してください。`;
+  // 「登録し直す」操作はその場に無い（記録の行にあるのは削除だけ）。実際に要る
+  // 2手をそのまま言う。
+  return `${year}年の作付けの作物が一覧にないため、この区画は判定できません。下の「作付けの記録」でその行を削除し、作物をえらび直して追加してください。`;
 }
 
 /**
@@ -284,6 +330,7 @@ export function panelVerdicts(input) {
           judgedYear: bed.latestYear ?? currentYear,
           currentYear,
           face: "bed",
+          sameFamilyCount: bed.sameFamilyCount,
         },
       ),
       latestCropId: bed.latestCropId ?? "",

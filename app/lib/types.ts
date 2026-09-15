@@ -116,6 +116,8 @@ export interface BedRotation extends Omit<RotationResult, "status"> {
   latestYear: number | null;
   /** 最新作付けの作物が作物マスタに無い（判定できない）。 */
   unknownCrop: boolean;
+  /** 区画にある同じ科の作付け件数（判定対象自身を含む）。 */
+  sameFamilyCount: number;
 }
 
 /** 種まき適期が「今月」か「翌月から」か。 */

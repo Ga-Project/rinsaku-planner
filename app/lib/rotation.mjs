@@ -208,6 +208,7 @@ export function evaluateRotation(records, familyKey, requiredYears, targetYear) 
  * @property {string | null} latestCropId 判定基準の最新作付けの作物 id
  * @property {number | null} latestYear 判定基準の最新作付けの年
  * @property {boolean} unknownCrop 最新作付けの作物が作物マスタに無い（判定できない）
+ * @property {number} sameFamilyCount 区画にある同じ科の作付け件数（**判定対象自身を含む**）
  */
 
 /**
@@ -237,6 +238,7 @@ export function bedStatus(plantings, cropLookup) {
       latestCropId: null,
       latestYear: null,
       unknownCrop: false,
+      sameFamilyCount: 0,
     };
   }
 
@@ -262,6 +264,7 @@ export function bedStatus(plantings, cropLookup) {
       // にして区画グリッドのバッジと worstStatus の意味を変えないが、
       // 判定できなかったことは画面に出す（黙って判定欄が消えるのを防ぐ）。
       unknownCrop: true,
+      sameFamilyCount: 0,
     };
   }
 
@@ -307,6 +310,10 @@ export function bedStatus(plantings, cropLookup) {
     latestCropId: latest.cropId,
     latestYear: latest.year,
     unknownCrop: false,
+    // 文が基準点を名乗るために要る。判定は判定対象自身を履歴から外して数えるが、
+    // 利用者が同じパネルの「作付けの記録」で数えられるのは**外す前の件数**なので、
+    // 文の側はそちらに合わせる（合わせないと画面内で反証できる文になる）。
+    sameFamilyCount: allSameFamilyYears.length,
   };
 }
 

@@ -56,7 +56,7 @@ test("①待てば実行できるなら、置ける年を名指しする", () =>
       { cropId: "tomato", year: 2026 },
       { cropId: "tomato", year: 2027 },
     ]),
-    "2026年に同じ科の作付けがあります。間隔は1年で、トマトの目安4年に足りません。いまある記録のままだと、どの作付けからも4年あくのは早くて2031年です。",
+    "この2027年のトマトから見ると、2026年に同じ科の作付けがあります。間隔は1年で、トマトの目安4年に足りません。いまある記録のままだと、どの作付けからも4年あくのは早くて2031年です。",
   );
 });
 
@@ -68,7 +68,7 @@ test("①-b 判定年が過ぎていても、待てば実行できる年は名�
       { cropId: "tomato", year: 2024 },
       { cropId: "tomato", year: 2025 },
     ]),
-    "2024年に同じ科の作付けがあります。間隔は1年で、トマトの目安4年に足りません。いまある記録のままだと、どの作付けからも4年あくのは早くて2029年です。",
+    "この2025年のトマトから見ると、2024年に同じ科の作付けがあります。間隔は1年で、トマトの目安4年に足りません。いまある記録のままだと、どの作付けからも4年あくのは早くて2029年です。",
   );
 });
 
@@ -94,7 +94,7 @@ test("④引けるレバーが1つも無い: 助言を出さず、答えが出�
   const text = previewText([{ cropId: "tomato", year: 2018 }], "tomato", 2019);
   assert.equal(
     text,
-    "2018年に同じ科の作付けがあります。間隔は1年で、トマトの目安4年に足りません。どちらも過ぎた年のことなので、これから植えるものは上の「いま植えるなら」で確かめてください。",
+    "2018年に同じ科の作付けがあります。間隔は1年で、トマトの目安4年に足りません。2019年も2018年ももう過ぎているので、これから植えるものは上の「いま植えるなら」で確かめてください。",
   );
   assert.doesNotMatch(text, /早くて|ずらす/);
 });
@@ -107,7 +107,7 @@ test("④-b チップ面は、動かせる記録のある場所を名指しす�
   for (const c of chips) {
     assert.match(
       c.text,
-      /間隔をあけるには、下の「作付けの記録」で2027年の作付けをずらすことになります。$/,
+      /間隔をあけるには、下の「作付けの記録」で2027年の作付けをずらすか、\d{4}年まで待つことになります。$/,
       `チップに実行できない助言が出ている: ${c.text}`,
     );
     // チップには年を動かす手段が無いので、判定年をずらせとは言わない。
@@ -123,7 +123,7 @@ test("⑦記録できない年は名指ししない", () => {
   ]);
   assert.equal(
     text,
-    "2997年に同じ科の作付けがあります。間隔は3年で、トマトの目安4年に足りません。3000年より後で、どの作付けからも4年あく年は、記録できる3000年より先になります。",
+    "この3000年のトマトから見ると、2997年に同じ科の作付けがあります。間隔は3年で、トマトの目安4年に足りません。3000年より後で、どの作付けからも4年あく年は、記録できる3000年より先になります。",
   );
   assert.doesNotMatch(text, /300[1-9]|3[1-9]\d\d/, "記録できない年を名指ししている");
 });
@@ -174,13 +174,13 @@ test("⑥同じ年に同じ科が2件: 間隔0の重なりとして言い分け�
       { cropId: "tomato", year: 2026 },
       { cropId: "eggplant", year: 2026 },
     ]),
-    "2026年には、同じ科の作付けがもう1件あります。間隔は0年で、ナスの目安4年に足りません。いまある記録のままだと、どの作付けからも4年あくのは早くて2030年です。",
+    "2026年には、同じ科の作付けがほかにもあります。間隔があかないので、ナスの目安4年に足りません。いまある記録のままだと、どの作付けからも4年あくのは早くて2030年です。",
   );
 });
 
 // --- 面ごとの差分は2つだけ ---------------------------------------------------
 
-test("同じ科の記録が無いときの文だけが面で変わる", () => {
+test("同じ科の記録が無いときの文は、面ごとに前提が違う", () => {
   const facts = {
     status: "ok",
     requiredYears: 4,
@@ -190,12 +190,7 @@ test("同じ科の記録が無いときの文だけが面で変わる", () => {
     conflictSide: null,
   };
   const ctx = { cropName: "トマト", judgedYear: 2026, currentYear: NOW };
-  // バナーは判定対象の作付け自身が下の一覧に並ぶので「ほかに」が要る。
-  assert.equal(
-    rotationSentence(facts, { ...ctx, face: "bed" }),
-    "前後の年に、同じ科の作付けはほかにありません。",
-  );
-  // まだ記録していない面で「ほかに」と言うと事実に反する。
+  // まだ記録していない面で「記録はありません」と言うのは真。
   assert.equal(
     rotationSentence(facts, { ...ctx, face: "preview" }),
     "この区画に、同じ科の作付けの記録はありません。",
@@ -203,6 +198,12 @@ test("同じ科の記録が無いときの文だけが面で変わる", () => {
   assert.equal(
     rotationSentence(facts, { ...ctx, face: "chip" }),
     "この区画に、同じ科の作付けの記録はありません。",
+  );
+  // バナーは判定対象自身を外して数えるので、この文を出してはいけない。
+  // 同科が判定対象1件だけのときは、その1件を名指しする専用の文になる。
+  assert.equal(
+    rotationSentence(facts, { ...ctx, face: "bed", sameFamilyCount: 1 }),
+    "この区画に記録した同じ科の作付けは、この2026年のトマト1件だけです。この作付けは連作になっていません。",
   );
 });
 
@@ -324,23 +325,134 @@ test("ok 分岐でも、目安年数は作物名とセットで名乗る", () =>
 });
 
 test("これから植える候補に、実行できない助言が出ない", () => {
-  // 候補の判定年は必ず今年か翌年なので、過ぎた年の分岐は起きない。
+  // ⚠️ 文面リテラルで「出ていないこと」を検査すると、文面を改名した瞬間に
+  // 針がどこにも一致しなくなり、検査が静かに空振りする（実際に一度そうなった）。
+  // ここでは (a) 針が生きていることを先に確かめ、(b) 構造の不変条件も併せて見る。
+  const pastAdvice = previewText(
+    [{ cropId: "tomato", year: 2018 }],
+    "tomato",
+    2019,
+  );
+  assert.match(
+    pastAdvice,
+    /もう過ぎているので/,
+    "針が現行の文面と一致していない（この検査は空振りしている）",
+  );
+
+  // 12月は作物マスタ上、今月も翌月も適期の作物が無く候補0件になる（正常）。
+  // 「どこかの月では候補が出ている」ことだけ担保して、空の月は素通りさせる。
+  let sawChips = false;
   for (const month of [4, 8, 12]) {
-    const chips = allChips(
-      panel(
-        [
-          { cropId: "tomato", year: 2027 },
-          { cropId: "potato", year: 2025 },
-        ],
-        { month },
-      ),
+    const p = panel(
+      [
+        { cropId: "tomato", year: 2027 },
+        { cropId: "potato", year: 2025 },
+      ],
+      { month },
     );
+    const chips = allChips(p);
+    if (chips.length > 0) sawChips = true;
     for (const c of chips) {
+      // (a) 文面による検査。
       assert.doesNotMatch(
         c.text,
-        /過ぎた年の記録なので/,
+        /もう過ぎているので/,
         `これから植える候補に過去向けの文が出ている (${c.nameJa}): ${c.text}`,
+      );
+      // (b) 構造による検査。候補の判定年は必ず今年以降で、これが崩れない限り
+      //     過去向けの分岐には入らない。文面を改名しても空振りしない。
+      assert.ok(
+        c.targetYear >= NOW,
+        `候補の判定年が過去になっている (${c.nameJa}: ${c.targetYear})`,
       );
     }
   }
+  assert.ok(sawChips, "どの月でも候補が1件も出ていない");
+});
+
+
+// --- パネル単位の不変条件（面ごとの文では担保できない） -----------------------
+//
+// バナーだけが判定対象の作付けを履歴から外して数えるので、区画全体について
+// 全称的に語ると、同じ記録を数に入れる候補チップと真っ向から食い違う。
+// 面ごとの文を個別に見るテストではこの組み合わせを捕まえられない（実際に
+// 11,800パネルぶんの矛盾が、全ゲート緑のまま公開まで通っていた）。
+
+/** 区画の配置を総当たりして、パネル単位で検査する。 */
+function forEachPanel(fn) {
+  const ids = CROPS.slice(0, 14).map((c) => c.id);
+  let count = 0;
+  for (const y0 of [2020, 2024, 2026, 2027]) {
+    for (const y1 of [2024, 2026, 2027]) {
+      for (const a of ids) {
+        for (const b of ids) {
+          for (const month of [4, 9]) {
+            const plantings = [{ cropId: a, year: y0 }];
+            if (!(a === b && y0 === y1)) plantings.push({ cropId: b, year: y1 });
+            const p = panel(plantings, { month });
+            if (p.banner === null) continue;
+            count++;
+            fn(p, plantings);
+          }
+        }
+      }
+    }
+  }
+  assert.ok(count > 1000, `総当たりの規模が小さすぎる: ${count}`);
+  return count;
+}
+
+test("バナーが同じ科の不在を主張している隣で、チップが同じ科を名指ししない", () => {
+  forEachPanel((p) => {
+    const banner = p.banner.text;
+    if (!/ありません/.test(banner)) return;
+    const named = allChips(p).filter((c) => c.nearestSameFamilyYear !== null);
+    assert.equal(
+      named.length,
+      0,
+      `バナー「${banner}」の隣でチップが記録を名指ししている: ${named[0]?.text}`,
+    );
+  });
+});
+
+test("バナーは区画全体についての全称的な言い方をしない", () => {
+  forEachPanel((p) => {
+    // 「ほかにありません」は判定対象を外した結果であって、区画の事実ではない。
+    assert.doesNotMatch(p.banner.text, /ほかにありません/);
+    // 「もう1件」は件数の断定。同じ年に同科が3件ある区画で実数と食い違う。
+    assert.doesNotMatch(p.banner.text, /もう1件/);
+  });
+});
+
+test("同じ科が2件以上あるバナーは、どの作付けから見た間隔かを名乗る", () => {
+  forEachPanel((p) => {
+    const facts = bedStatus(
+      p.banner.latestCropId
+        ? [{ cropId: p.banner.latestCropId, year: p.banner.latestYear }]
+        : [],
+      cropById,
+    );
+    void facts;
+    const t = p.banner.text;
+    if (!/間隔は|間隔があかない/.test(t)) return;
+    if (/^\d{4}年には、/.test(t)) return; // 同年重複は両面とも間隔0で一致する
+    assert.match(
+      t,
+      /^この\d{4}年の.+から見ると、/,
+      `基準点を名乗らずに間隔を述べている: ${t}`,
+    );
+  });
+});
+
+test("バナーで同じ科の記録が無いのは、判定対象1件だけの区画に限る", () => {
+  // 除外規則が変わったときに気づけるようにする（設計上の前提の明示）。
+  forEachPanel((p, plantings) => {
+    const bed = bedStatus(plantings, cropById);
+    if (bed.nearestSameFamilyYear !== null) return;
+    assert.equal(
+      bed.sameFamilyCount,
+      1,
+      `同科が無いのに件数が1でない: ${JSON.stringify(plantings)}`,
+    );
+  });
 });

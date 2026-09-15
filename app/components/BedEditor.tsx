@@ -67,7 +67,9 @@ export function BedEditor({
     <div className="bed-editor card">
       <div className="section-head">
         <h3 style={{ marginTop: 0 }}>区画の編集</h3>
-        <StateBadge status={status.status} />
+        <StateBadge
+          status={panel.unknownCropText !== null ? "unknown" : status.status}
+        />
       </div>
 
       <div className="field">
@@ -97,9 +99,7 @@ export function BedEditor({
       {/* 作物マスタに無い id（古い保存データ等）。判定欄が黙って消えると
           「なぜ何も出ないのか」が利用者に分からないので、理由だけ出す。 */}
       {panel.unknownCropText !== null && (
-        <p className="verdict is-empty" role="status">
-          {panel.unknownCropText}
-        </p>
+        <Verdict status="unknown" text={panel.unknownCropText} />
       )}
 
       {panel.banner !== null && (
