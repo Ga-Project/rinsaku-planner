@@ -257,6 +257,17 @@ test("グリッドと編集パネルは、同じ区画に同じ状態名を出�
     [],
     [{ cropId: "tomato", year: 2026 }],
     [{ cropId: "not-a-crop", year: 2026 }],
+    // ⚠️ 「未知が最新でない」配置を必ず含める。ここが抜けていたため、バッジの
+    //    導出規則を変えたときグリッド側だけ取り残された退行を素通りさせた。
+    [
+      { cropId: "not-a-crop", year: 2020 },
+      { cropId: "tomato", year: 2026 },
+    ],
+    [
+      { cropId: "not-a-crop", year: 2020 },
+      { cropId: "tomato", year: 2025 },
+      { cropId: "tomato", year: 2026 },
+    ],
   ]) {
     const grid = renderGrid(plantings);
     const panel = render(plantings);

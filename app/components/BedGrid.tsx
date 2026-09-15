@@ -3,6 +3,7 @@
 import type { CSSProperties } from "react";
 import type { Garden, Bed } from "../lib/types";
 import { bedStatus } from "../lib/rotation.mjs";
+import { bedBadgeStatus } from "../lib/verdictCopy.mjs";
 import { cropById, FAMILY_HUE } from "../lib/crops.mjs";
 import { StateBadge } from "./status-ui";
 import { IconPlus, IconSeedling } from "./icons";
@@ -61,12 +62,10 @@ export function BedGrid({
             <span className="bed-cell-label">{bed.label || "区画"}</span>
             {latest && <span className="bed-cell-fam" aria-hidden="true" />}
             <span className="bed-cell-kind">{KIND_LABEL[bed.kind]}</span>
-            {/* 編集パネルと同じ根拠で出す。片方だけ unknown にすると、同じ区画に
-                ついてグリッドが「未設定」、パネルが「判定できません」と別の状態名を
-                同時に名乗ることになる。 */}
-            <StateBadge
-              status={status.unknownCrop ? "unknown" : status.status}
-            />
+            {/* 導出は bedBadgeStatus が唯一持つ。ここで条件を書くと、規則を
+                変えたとき片方だけ古いままになり、同じ区画についてグリッドと
+                編集パネルが別の状態名を名乗る（実際に一度そうなった）。 */}
+            <StateBadge status={bedBadgeStatus(status)} />
             <span className="bed-cell-crop">
               {latest ? (
                 <>

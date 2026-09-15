@@ -215,7 +215,11 @@ export function BedEditor({
               ここにも届ける（下だけを見ている人に、判定に入れていない記録がある
               ことが伝わらない）。 */}
           {panel.undecidableNotice !== null && (
-            <p className="verdict is-unknown">{panel.undecidableNotice}</p>
+            <Verdict
+              status="unknown"
+              text={panel.undecidableNotice}
+              live={false}
+            />
           )}
           {/* 年入力は1打鍵ごとに再計算されるので、読み上げは通知しない
               （途中の値で長文が繰り返し読まれる）。選択結果は下の pickNotice が伝える。 */}

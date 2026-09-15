@@ -4,6 +4,7 @@ import { useId, useState } from "react";
 import type { PanelChip, PanelGroups } from "../lib/types";
 import { nextMonth } from "../lib/suggest.mjs";
 import { MONTH_LABELS } from "../lib/schedule.mjs";
+import { Verdict } from "./status-ui";
 import { IconCheck, IconWarn, IconStop, IconClock } from "./icons";
 
 /** 作付け最盛期は候補が48件出る月がある。既定で見せる件数を抑え、残りは開いて見せる。 */
@@ -150,9 +151,7 @@ export function PlantNow({
               これが無いと「この区画に植えられます」が、科の分からない記録を
               勘定に入れたうえでの断定に読める。 */}
           {undecidableNotice !== null && (
-            <p className="verdict is-unknown" role="status">
-              {undecidableNotice}
-            </p>
+            <Verdict status="unknown" text={undecidableNotice} />
           )}
           <p className="muted plantnow-lead">
             {hasThisMonth

@@ -299,6 +299,27 @@ export function unknownCropText(year) {
 }
 
 /**
+ * 区画のバッジに出す状態値。**グリッドと編集パネルの両方がこれを通す。**
+ *
+ * 導出を2箇所に置くと、規則を変えたとき片方だけが古いままになり、同じ区画に
+ * ついてグリッドが「植え付けOK」・パネルが「判定できません」と名乗る。実際に
+ * 一度そうなった（判定に入れられない記録の扱いを変えたとき、グリッド側が
+ * 取り残された）。
+ *
+ * 判定に入れられない記録があるなら「植え付けOK」とは名乗らない。その記録が
+ * 連作かもしれないので OK は overclaim になる。一方 caution / ng は既知の違反
+ * なのでそのまま残す（判定できないことを理由に警告を消すほうが危険）。
+ *
+ * @param {import("./types").BedRotation} bed
+ * @returns {import("./types").RotationStatus | "empty" | "unknown"}
+ */
+export function bedBadgeStatus(bed) {
+  if (bed.unknownCrop) return "unknown";
+  if (bed.undecidableYears.length === 0) return bed.status;
+  return bed.status === "ok" || bed.status === "empty" ? "unknown" : bed.status;
+}
+
+/**
  * 1区画ぶんの「画面に出る文」をすべてここで作る。
  *
  * ■ なぜ3面をまとめて1つの関数にするか
@@ -421,13 +442,7 @@ export function panelVerdicts(input) {
     banner,
     // バッジの状態値もここで決める。コンポーネント側で「文が null かどうか」から
     // 導くと、文面層の変更でバッジだけ静かに別の状態へ戻る。
-    // 判定に入れられない記録があるなら「植え付けOK」とは名乗らない（その記録が
-    // 連作かもしれないので、OK は overclaim になる）。一方 caution / ng は既知の
-    // 違反なのでそのまま残す（判定できないことを理由に警告を消すほうが危険）。
-    badgeStatus:
-      bed.unknownCrop || (undecidableNotice !== null && bed.status === "ok")
-        ? "unknown"
-        : bed.status,
+    badgeStatus: bedBadgeStatus(bed),
     undecidableYears,
     undecidableNotice,
     unknownCropText: bed.unknownCrop
