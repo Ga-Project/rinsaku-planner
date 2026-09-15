@@ -483,3 +483,89 @@ test("バナーで同じ科の記録が無いのは、判定対象1件だけの�
     );
   });
 });
+
+// --- 判定に入れられない記録（作物が一覧に無い） -------------------------------
+//
+// 作物マスタから作物が消えると、その記録は **古い年** にあるのが自然。ところが
+// 判定不能の検知を「最新の作付けが未知か」で書いていたため、古い年に混ざった
+// 未知の記録は3つの経路（bedStatus の履歴・候補生成・プレビュー）で無言に捨てられ、
+// 画面は同じパネルにその行が見えている状態で「記録はありません」と断定していた。
+// 最新かどうかに依らないことを、非最新の位置に差し込んだ総当たりで固定する。
+
+/** 未知 cropId を色々な位置に差し込んだ区画を総当たりする。 */
+function forEachUndecidablePanel(fn) {
+  const ids = CROPS.slice(0, 8).map((c) => c.id);
+  let count = 0;
+  for (const unknownYear of [2018, 2024, 2026, 2030]) {
+    for (const knownYear of [2020, 2026, 2028]) {
+      for (const known of ids) {
+        for (const month of [4, 9]) {
+          const plantings = [
+            { cropId: "not-a-crop", year: unknownYear },
+            { cropId: known, year: knownYear },
+          ];
+          count++;
+          fn(panel(plantings, { month }), plantings);
+        }
+      }
+    }
+  }
+  assert.ok(count > 100, `総当たりの規模が小さすぎる: ${count}`);
+  return count;
+}
+
+test("判定に入れられない記録は、最新でなくても但し書きが出る", () => {
+  let reached = 0;
+  forEachUndecidablePanel((p, plantings) => {
+    const bed = bedStatus(plantings, cropById);
+    if (bed.undecidableYears.length === 0) return;
+    reached++;
+    assert.notEqual(
+      p.undecidableNotice,
+      null,
+      `判定に入れていない記録があるのに但し書きが無い: ${JSON.stringify(plantings)}`,
+    );
+    for (const y of bed.undecidableYears) {
+      assert.match(
+        p.undecidableNotice,
+        new RegExp(`${y}`),
+        `但し書きが ${y} 年の記録に触れていない`,
+      );
+    }
+  });
+  assert.ok(reached > 100, `検査に到達したパネルが少なすぎる: ${reached}`);
+});
+
+test("但し書きが無いまま「記録はありません」と断定する面が無い", () => {
+  let reached = 0;
+  forEachUndecidablePanel((p) => {
+    const texts = [
+      ...allChips(p).map((c) => c.text),
+      p.preview?.text,
+      p.banner?.text,
+    ].filter(Boolean);
+    const denials = texts.filter((t) => t.includes("記録はありません"));
+    if (denials.length === 0) return;
+    reached++;
+    assert.notEqual(
+      p.undecidableNotice,
+      null,
+      `但し書き無しで不在を断定している: ${denials[0]}`,
+    );
+  });
+  assert.ok(reached > 50, `検査に到達したパネルが少なすぎる: ${reached}`);
+});
+
+test("判定に入れられない記録がある区画は、植え付けOKを名乗らない", () => {
+  // その記録が連作かもしれないので「OK」は overclaim。既知の caution / ng は
+  // 判定できないことを理由に消さない（警告を消すほうが危険）。
+  forEachUndecidablePanel((p, plantings) => {
+    const bed = bedStatus(plantings, cropById);
+    if (bed.undecidableYears.length === 0) return;
+    if (bed.status === "ok" || bed.status === "empty") {
+      assert.equal(p.badgeStatus, "unknown", JSON.stringify(plantings));
+    } else {
+      assert.equal(p.badgeStatus, bed.status, JSON.stringify(plantings));
+    }
+  });
+});

@@ -118,6 +118,8 @@ export interface BedRotation extends Omit<RotationResult, "status"> {
   unknownCrop: boolean;
   /** 区画にある同じ科の作付け件数（判定対象自身を含む）。 */
   sameFamilyCount: number;
+  /** 作物が一覧に無く、判定に入れられなかった作付けの年（昇順・全件）。 */
+  undecidableYears: number[];
 }
 
 /** 種まき適期が「今月」か「翌月から」か。 */

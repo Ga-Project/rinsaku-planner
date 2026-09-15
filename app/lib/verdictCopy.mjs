@@ -78,7 +78,6 @@ const FACES = {
  * @param {"bed" | "chip" | "preview"} ctx.face どの面に出すか
  * @param {number} [ctx.sameFamilyCount] 区画の同じ科の作付け件数（bed 面でのみ使う）
  * @param {string} [ctx.familyJa] 判定に使った作物の科名（bed 面でのみ使う）
- * @param {number|null} [ctx.undecidableYear] 作物が一覧に無くて科が分からない記録の年
  * @returns {string}
  */
 export function rotationSentence(facts, ctx) {
@@ -112,11 +111,10 @@ export function rotationSentence(facts, ctx) {
         `rotationSentence: ${ctx.face} 面で同じ科の記録が無い状態に到達した`,
       );
     }
-    // 科の分からない記録がある区画で「記録はありません」と断定すると、
-    // 直前に判定不能と宣言した事柄を事実として言い切ることになる。
-    if (ctx.undecidableYear != null) {
-      return `この区画の${ctx.undecidableYear}年の記録は、作物が一覧にないため科が分かりません。この判定には入れていません。`;
-    }
+    // 科の分からない記録がある区画でも、ここは候補ごとの判定を語る。
+    // 「判定に入れていない記録がある」ことは群の上に1行だけ置く（undecidableNotice）。
+    // ここで置き換えると、同じ1文がチップの読み上げ名に11回、可視段落に2回、
+    // 合わせて13回描かれ、候補ごとの判定がどこにも残らない。
     return face.empty;
   }
 
@@ -325,7 +323,8 @@ export function unknownCropText(year) {
  * @returns {{
  *   banner: {status: RotationStatus, text: string, latestCropId: string, latestYear: number} | null,
  *   badgeStatus: RotationStatus | "empty" | "unknown",
- *   undecidableYear: number | null,
+ *   undecidableYears: number[],
+ *   undecidableNotice: string | null,
  *   unknownCropText: string | null,
  *   groups: PanelGroups,
  *   totalChips: number,
@@ -337,8 +336,13 @@ export function panelVerdicts(input) {
     input;
 
   const bed = bedStatus(plantings, cropLookup);
-  // 科が分からない記録の年。文面と、チップ群の但し書きの両方が要る。
-  const undecidableYear = bed.unknownCrop ? (bed.latestYear ?? null) : null;
+  // 判定に入れられなかった記録の年（全件）。最新1件だけを見ると、古い年に混ざった
+  // 未知の記録を3つの経路が無言で捨て、画面が「記録はありません」と断定してしまう。
+  const undecidableYears = bed.undecidableYears;
+  const undecidableNotice =
+    undecidableYears.length > 0
+      ? `この区画には、作物が一覧にない${undecidableYears.join("・")}年の記録があります。その科が分からないので、この記録は判定に入れていません。`
+      : null;
 
   // --- 区画バナー: 判定年は「最新作付けの年」。ここ以外から採らない。
   let banner = null;
@@ -379,7 +383,6 @@ export function panelVerdicts(input) {
         judgedYear: s.targetYear,
         currentYear,
         face: "chip",
-        undecidableYear,
       }),
       note: rotationChipNote(s),
     }));
@@ -410,7 +413,6 @@ export function panelVerdicts(input) {
         judgedYear,
         currentYear,
         face: "preview",
-        undecidableYear,
       }),
     };
   }
@@ -419,8 +421,15 @@ export function panelVerdicts(input) {
     banner,
     // バッジの状態値もここで決める。コンポーネント側で「文が null かどうか」から
     // 導くと、文面層の変更でバッジだけ静かに別の状態へ戻る。
-    badgeStatus: bed.unknownCrop ? "unknown" : bed.status,
-    undecidableYear,
+    // 判定に入れられない記録があるなら「植え付けOK」とは名乗らない（その記録が
+    // 連作かもしれないので、OK は overclaim になる）。一方 caution / ng は既知の
+    // 違反なのでそのまま残す（判定できないことを理由に警告を消すほうが危険）。
+    badgeStatus:
+      bed.unknownCrop || (undecidableNotice !== null && bed.status === "ok")
+        ? "unknown"
+        : bed.status,
+    undecidableYears,
+    undecidableNotice,
     unknownCropText: bed.unknownCrop
       ? unknownCropText(bed.latestYear ?? currentYear)
       : null,

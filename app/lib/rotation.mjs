@@ -209,6 +209,7 @@ export function evaluateRotation(records, familyKey, requiredYears, targetYear) 
  * @property {number | null} latestYear 判定基準の最新作付けの年
  * @property {boolean} unknownCrop 最新作付けの作物が作物マスタに無い（判定できない）
  * @property {number} sameFamilyCount 区画にある同じ科の作付け件数（**判定対象自身を含む**）
+ * @property {number[]} undecidableYears 作物が作物マスタに無く、判定に入れられなかった作付けの年（昇順・全件）
  */
 
 /**
@@ -226,6 +227,15 @@ export function bedStatus(plantings, cropLookup) {
     (p) => p && typeof p.cropId === "string" && Number.isInteger(p.year),
   );
 
+  // 作物マスタに無い作付けの年（全件）。最新1件だけを見ると、古い年に混ざった
+  // 未知の記録が3つの経路（bedStatus の priorPlantings / suggest / プレビュー）で
+  // 無言に捨てられ、画面が「記録はありません」と断定する。マスタから作物が消えた
+  // 場合その記録は古い年にあるのが自然なので、こちらのほうが起きやすい。
+  const undecidableYears = list
+    .filter((p) => !cropLookup(p.cropId))
+    .map((p) => p.year)
+    .sort((a, b) => a - b);
+
   if (list.length === 0) {
     return {
       status: "empty",
@@ -239,6 +249,7 @@ export function bedStatus(plantings, cropLookup) {
       latestYear: null,
       unknownCrop: false,
       sameFamilyCount: 0,
+      undecidableYears,
     };
   }
 
@@ -265,6 +276,7 @@ export function bedStatus(plantings, cropLookup) {
       // 判定できなかったことは画面に出す（黙って判定欄が消えるのを防ぐ）。
       unknownCrop: true,
       sameFamilyCount: 0,
+      undecidableYears,
     };
   }
 
@@ -314,6 +326,7 @@ export function bedStatus(plantings, cropLookup) {
     // 利用者が同じパネルの「作付けの記録」で数えられるのは**外す前の件数**なので、
     // 文の側はそちらに合わせる（合わせないと画面内で反証できる文になる）。
     sameFamilyCount: allSameFamilyYears.length,
+    undecidableYears,
   };
 }
 

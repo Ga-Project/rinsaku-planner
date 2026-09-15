@@ -285,6 +285,25 @@ test("候補が0件の月でも、見出しと不在の説明は必ず描く", (
   assert.match(html, /種まき・植え付けの適期を迎える作物はありません/);
 });
 
+test("判定に入れていない記録の但し書きは、候補群とプレビューの両方に届く", () => {
+  // 候補群の側は実描画で確かめられる。
+  const html = render([
+    { cropId: "not-a-crop", year: 2020 },
+    { cropId: "corn", year: 2026 },
+  ]);
+  assert.match(html, /作物が一覧にない2020年の記録があります/);
+
+  // プレビューは作物を選んだときだけ描かれ、その状態は BedEditor の内部にあるので
+  // SSR では踏めない。ここだけはソースで「両方に渡していること」を固定する。
+  // （描画で検査できないことを承知のうえの narrow なガード。）
+  const src = readFileSync("app/components/BedEditor.tsx", "utf8");
+  const uses = [...src.matchAll(/panel\.undecidableNotice/g)].length;
+  assert.ok(
+    uses >= 2,
+    `但し書きの配り先が足りない（候補群とプレビューの2箇所が要る）: ${uses}`,
+  );
+});
+
 test("コンポーネントは判定文を自前で組み立てない", () => {
   // 文の出どころを verdictCopy 1か所に保つ。ここが破れると、面ごとに文がずれる。
   for (const name of ["BedEditor", "PlantNow", "status-ui"]) {

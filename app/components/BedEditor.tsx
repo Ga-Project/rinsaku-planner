@@ -115,7 +115,7 @@ export function BedEditor({
       <PlantNow
         groups={panel.groups}
         total={panel.totalChips}
-        undecidableYear={panel.undecidableYear}
+        undecidableNotice={panel.undecidableNotice}
         month={currentMonth}
         year={currentYear}
         selectedCropId={cropId}
@@ -211,6 +211,12 @@ export function BedEditor({
             {summarizeMonths(panel.preview.crop.sowMonths)}／収穫{" "}
             {summarizeMonths(panel.preview.crop.harvestMonths)}
           </p>
+          {/* 但し書きはチップ群の上にもあるが、プレビューはその下にあるので
+              ここにも届ける（下だけを見ている人に、判定に入れていない記録がある
+              ことが伝わらない）。 */}
+          {panel.undecidableNotice !== null && (
+            <p className="verdict is-unknown">{panel.undecidableNotice}</p>
+          )}
           {/* 年入力は1打鍵ごとに再計算されるので、読み上げは通知しない
               （途中の値で長文が繰り返し読まれる）。選択結果は下の pickNotice が伝える。 */}
           <Verdict
