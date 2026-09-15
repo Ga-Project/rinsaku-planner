@@ -1,30 +1,14 @@
 "use client";
 
-import { useId, useMemo, useState } from "react";
-import type { Planting, Suggestion } from "../lib/types";
-import {
-  suggestPlantings,
-  groupSuggestions,
-  nextMonth,
-} from "../lib/suggest.mjs";
-import { CROPS } from "../lib/crops.mjs";
+import { useId, useState } from "react";
+import type { PanelChip, PanelGroups } from "../lib/types";
+import { nextMonth } from "../lib/suggest.mjs";
 import { MONTH_LABELS } from "../lib/schedule.mjs";
-import { suggestionText, rotationChipNote } from "../lib/verdictCopy.mjs";
 import { IconCheck, IconWarn, IconStop, IconClock } from "./icons";
 
 /** 作付け最盛期は候補が48件出る月がある。既定で見せる件数を抑え、残りは開いて見せる。 */
 const VISIBLE_LIMIT = 8;
 
-/**
- * チップに出す科名。括弧書き（「ヒガンバナ科（ネギ類）」）を落として全角6以内に収める。
- * 11全角は 320px で確実に2行になり、チップが7行に膨らむ事故の主因だった。
- * チップは識別ラベルで、科の正式名は早見表と読み上げ名が担保する。
- * @param familyJa 科の正式名
- */
-function shortFamily(familyJa: string): string {
-  const i = familyJa.indexOf("（");
-  return i > 0 ? familyJa.slice(0, i) : familyJa;
-}
 
 /**
  * 候補のひとまとまり。見出しの語・アイコン形状・色の三重で状態を示し、
@@ -39,7 +23,6 @@ function Group({
   Icon,
   items,
   selectedCropId,
-  currentYear,
   onPick,
 }: {
   title: string;
@@ -48,11 +31,9 @@ function Group({
   state: string;
   cls: string;
   Icon: (props: { className?: string }) => JSX.Element;
-  items: Suggestion[];
+  items: PanelChip[];
   selectedCropId: string;
-  /** 暦の今年。過ぎた年かどうかの判定に要る（文の締めが分岐する）。 */
-  currentYear: number;
-  onPick: (s: Suggestion) => void;
+  onPick: (s: PanelChip) => void;
 }) {
   const headId = useId();
   const [expanded, setExpanded] = useState(false);
@@ -69,11 +50,7 @@ function Group({
         <span className="muted plantnow-group-note">{note}</span>
       </p>
       <ul className="plantnow-chips">
-        {shown.map((s) => {
-          // 文はチップごとに書き起こさず、バナー・プレビューと同じ合成関数を通す。
-          const sentence = suggestionText(s, currentYear);
-          const chipNote = rotationChipNote(s);
-          return (
+        {shown.map((s) => (
           <li key={s.cropId}>
             <button
               type="button"
@@ -82,24 +59,21 @@ function Group({
               // 見た目（色・形）で伝えている状態を、読み上げにも同じだけ乗せる。
               // 理由は title 属性だとタッチでもキーボードでも開けないので名前に含める。
               // 科名は短縮せずフルで読ませる（見た目だけを 320px に合わせている）。
-              aria-label={`${s.nameJa}（${s.familyJa}）— ${state}。${sentence}`}
+              aria-label={`${s.nameJa}（${s.familyJa}）— ${state}。${s.text}`}
               onClick={() => onPick(s)}
             >
               <span className="plantnow-chip-name">{s.nameJa}</span>
-              <span className="plantnow-chip-family">
-                {shortFamily(s.familyJa)}
-              </span>
+              <span className="plantnow-chip-family">{s.familyJa}</span>
               {/* 補助ラベルの出し分けは verdictCopy が持つ。年数ではなく年を出すのは
                   「あと5年」の起点が画面に無く検算できないため。衝突相手が判定年より
                   後のときに「早くて◯年」を出さないのは、その年が未来の計画より後ろに
                   なり、候補同士を「どれが先に空くか」で見比べる用途に対して嘘になるため。 */}
-              {chipNote !== null && (
-                <span className="plantnow-chip-note">{chipNote}</span>
+              {s.note !== null && (
+                <span className="plantnow-chip-note">{s.note}</span>
               )}
             </button>
           </li>
-          );
-        })}
+        ))}
       </ul>
       {hidden > 0 && (
         <button
@@ -124,22 +98,21 @@ function Group({
  * ここは「これから植える場合」を見る（時制が違うので文言で必ず区別する）。
  */
 export function PlantNow({
-  plantings,
+  groups,
+  total,
   month,
   year,
   selectedCropId,
   onPick,
 }: {
-  plantings: Planting[];
+  /** 判定ずみの候補（文・補助ラベルは組み立て済み）。ここでは作らない。 */
+  groups: PanelGroups;
+  total: number;
   month: number;
   year: number;
   selectedCropId: string;
-  onPick: (s: Suggestion) => void;
+  onPick: (s: PanelChip) => void;
 }) {
-  const { groups, total } = useMemo(() => {
-    const list = suggestPlantings(plantings, CROPS, month, year);
-    return { groups: groupSuggestions(list), total: list.length };
-  }, [plantings, month, year]);
 
   const monthLabel = MONTH_LABELS[month - 1] ?? `${month}月`;
   const nextLabel = MONTH_LABELS[nextMonth(month) - 1] ?? "翌月";
@@ -181,7 +154,6 @@ export function PlantNow({
             Icon={IconCheck}
             items={groups.now}
             selectedCropId={selectedCropId}
-            currentYear={year}
             onPick={onPick}
           />
           <Group
@@ -192,7 +164,6 @@ export function PlantNow({
             Icon={IconWarn}
             items={groups.caution}
             selectedCropId={selectedCropId}
-            currentYear={year}
             onPick={onPick}
           />
           <Group
@@ -203,7 +174,6 @@ export function PlantNow({
             Icon={IconStop}
             items={groups.avoid}
             selectedCropId={selectedCropId}
-            currentYear={year}
             onPick={onPick}
           />
           <Group
@@ -222,7 +192,6 @@ export function PlantNow({
             Icon={IconClock}
             items={groups.soon}
             selectedCropId={selectedCropId}
-            currentYear={year}
             onPick={onPick}
           />
         </>

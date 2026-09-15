@@ -1,7 +1,7 @@
 // 連作判定ロジックのテスト（node:test 標準ランナー）。
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { bedVerdictText } from "../app/lib/verdictCopy.mjs";
+import { panelVerdicts } from "../app/lib/verdictCopy.mjs";
 import {
   evaluateRotation,
   bedStatus,
@@ -321,9 +321,20 @@ test("worstStatus: 最も深刻なステータスを返す", () => {
 // 経路だけが「2026年 トマト」と表示した直下で「2026年までに記録はありません」と
 // 言う状態が全テスト緑のまま通った）。
 
-/** 区画バナーに実際に出る文（画面が呼ぶのと同じ関数を通す）。 */
+/**
+ * 区画バナーに実際に出る文。コンポーネントが呼ぶのと同じ関数を通すので、
+ * 判定年の取り違えもここで捕まる（crops を空にして候補チップは作らない）。
+ */
 function bedText(plantings, _cropName, currentYear) {
-  return bedVerdictText(bedStatus(plantings, lookup), lookup, currentYear);
+  return panelVerdicts({
+    plantings,
+    month: 5,
+    currentYear,
+    formCropId: "",
+    formYear: "",
+    cropLookup: lookup,
+    crops: [],
+  }).banner?.text;
 }
 
 test("bedStatus: 作付け1件だけの区画で『記録はありません』と矛盾しない", () => {

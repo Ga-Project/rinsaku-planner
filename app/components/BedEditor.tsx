@@ -1,16 +1,11 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import type { Bed, BedKind, Suggestion } from "../lib/types";
-import { bedStatus, evaluateRotation } from "../lib/rotation.mjs";
-import { cropById, cropsGroupedByFamily } from "../lib/crops.mjs";
+import type { Bed, BedKind, PanelChip } from "../lib/types";
+import { bedStatus } from "../lib/rotation.mjs";
+import { CROPS, cropById, cropsGroupedByFamily } from "../lib/crops.mjs";
 import { summarizeMonths } from "../lib/schedule.mjs";
-import {
-  bedVerdictText,
-  previewVerdictText,
-  suggestionText,
-  UNKNOWN_CROP_TEXT,
-} from "../lib/verdictCopy.mjs";
+import { panelVerdicts } from "../lib/verdictCopy.mjs";
 import { Verdict, StateBadge } from "./status-ui";
 import { PlantNow } from "./PlantNow";
 import { IconPlus, IconTrash } from "./icons";
@@ -43,36 +38,24 @@ export function BedEditor({
   const [pickNotice, setPickNotice] = useState("");
   const cropSelectRef = useRef<HTMLSelectElement>(null);
 
+  // 画面に出る文はすべて panelVerdicts が作る。判定年をどこから採るかは
+  // その関数の内側に閉じてあるので、ここで取り違えることができない。
+  const panel = useMemo(
+    () =>
+      panelVerdicts({
+        plantings: bed.plantings,
+        month: currentMonth,
+        currentYear,
+        formCropId: cropId,
+        formYear: year,
+        cropLookup: cropById,
+        crops: CROPS,
+      }),
+    [bed.plantings, currentMonth, currentYear, cropId, year],
+  );
+
+  // 区画グリッドのバッジと同じ状態値（文は panel が持つ）。
   const status = bedStatus(bed.plantings, cropById);
-
-  // 追加フォームで選択中の作物・年に対する連作プレビュー（既存の作付けに照らす）。
-  const preview = useMemo(() => {
-    const crop = cropId ? cropById(cropId) : undefined;
-    if (!crop) return null;
-    const eff = year === "" ? currentYear : year;
-    const past = bed.plantings
-      .map((p) => {
-        const c = cropById(p.cropId);
-        return c ? { familyKey: c.familyKey, year: p.year } : null;
-      })
-      .filter((x): x is { familyKey: string; year: number } => x !== null);
-    const result = evaluateRotation(
-      past,
-      crop.familyKey,
-      crop.rotationYears,
-      eff,
-    );
-    return {
-      crop,
-      result,
-      // 判定年（eff）は入力欄の年なので過去も未来も来る。
-      text: previewVerdictText(result, crop, eff, currentYear),
-    };
-  }, [cropId, year, bed.plantings, currentYear]);
-
-  // 文の組み立て（どの作物名・どの年を渡すか）は lib 側に置いてある。
-  // ここで組み立てると、引数の取り違えを JSX を描画しないと検査できなくなる。
-  const bannerText = bedVerdictText(status, cropById, currentYear);
 
   function handleAdd() {
     if (!cropId) return;
@@ -113,43 +96,41 @@ export function BedEditor({
 
       {/* 作物マスタに無い id（古い保存データ等）。判定欄が黙って消えると
           「なぜ何も出ないのか」が利用者に分からないので、理由だけ出す。 */}
-      {status.unknownCrop && (
-        <p className="muted" role="status">
-          {UNKNOWN_CROP_TEXT}
+      {panel.unknownCropText !== null && (
+        <p className="verdict is-empty" role="status">
+          {panel.unknownCropText}
         </p>
       )}
 
-      {status.status !== "empty" && (
+      {panel.banner !== null && (
         <>
           {/* このバナーは「すでに記録した作付け」を、それ以前の記録に照らして判定したもの。
               すぐ下の候補は「これから植える場合」の判定で時制が違うため、
               どちらの話かを必ず言葉で分ける（同じランプ色が隣り合うので取り違えられる）。 */}
-          {status.latestCropId !== null && status.latestYear !== null && (
-            <p className="muted verdict-scope">
-              すでに記録した作付けの判定 ── {status.latestYear}年{" "}
-              {cropById(status.latestCropId)?.nameJa ?? status.latestCropId}
-            </p>
-          )}
-          <Verdict status={status.status} text={bannerText ?? ""} />
+          <p className="muted verdict-scope">
+            すでに記録した作付けの判定 ── {panel.banner.latestYear}年{" "}
+            {cropById(panel.banner.latestCropId)?.nameJa ??
+              panel.banner.latestCropId}
+          </p>
+          <Verdict status={panel.banner.status} text={panel.banner.text} />
         </>
       )}
 
       {/* この区画の記録と今月の適期から、これから植えられる作物を先に見せる。
           選ぶと下の追加フォームに入り、そのまま記録できる。 */}
       <PlantNow
-        plantings={bed.plantings}
+        groups={panel.groups}
+        total={panel.totalChips}
         month={currentMonth}
         year={currentYear}
         selectedCropId={cropId}
-        onPick={(s: Suggestion) => {
+        onPick={(s: PanelChip) => {
           setCropId(s.cropId);
           // 候補はその年に植える前提で連作を判定しているので、年も候補側に合わせる
           // （12月に「1月からの作付け」を選ぶと翌年になる）。入力中の年は上書きされる。
           setYear(s.targetYear);
-          // チップ本体と同じ文を読み上げる（片方だけ直すと食い違う）。
-          setPickNotice(
-            `${s.nameJa}を選びました。` + suggestionText(s, currentYear),
-          );
+          // チップ本体と同じ文を読み上げる（同じデータなので食い違わない）。
+          setPickNotice(`${s.nameJa}を選びました。${s.text}`);
           // 選んだ結果が入るフォームまで視線を運ぶ（下にあって見えないことがある）。
           cropSelectRef.current?.focus();
         }}
@@ -228,14 +209,20 @@ export function BedEditor({
         </div>
       </div>
 
-      {preview && (
+      {panel.preview !== null && (
         <div style={{ marginTop: "var(--sp-3)" }}>
           <p className="muted" style={{ marginBottom: "var(--sp-1)" }}>
-            {preview.crop.familyJa}・種まき/植え付け{" "}
-            {summarizeMonths(preview.crop.sowMonths)}／収穫{" "}
-            {summarizeMonths(preview.crop.harvestMonths)}
+            {panel.preview.crop.familyJa}・種まき/植え付け{" "}
+            {summarizeMonths(panel.preview.crop.sowMonths)}／収穫{" "}
+            {summarizeMonths(panel.preview.crop.harvestMonths)}
           </p>
-          <Verdict status={preview.result.status} text={preview.text} />
+          {/* 年入力は1打鍵ごとに再計算されるので、読み上げは通知しない
+              （途中の値で長文が繰り返し読まれる）。選択結果は下の pickNotice が伝える。 */}
+          <Verdict
+            status={panel.preview.status}
+            text={panel.preview.text}
+            live={false}
+          />
         </div>
       )}
 

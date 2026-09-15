@@ -146,3 +146,19 @@ export interface Suggestion {
   /** 最も近い同科の年が判定年と同じ/前/後のどれか（無ければ null）。 */
   conflictSide: ConflictSide;
 }
+
+/** 候補チップ1件（文と補助ラベルまで組み立て済み）。 */
+export interface PanelChip extends Suggestion {
+  /** チップの説明文（読み上げ名に載せる）。 */
+  text: string;
+  /** チップ上の短い補助ラベル（無ければ null）。 */
+  note: string | null;
+}
+
+/** 候補チップの4群。 */
+export interface PanelGroups {
+  now: PanelChip[];
+  caution: PanelChip[];
+  avoid: PanelChip[];
+  soon: PanelChip[];
+}

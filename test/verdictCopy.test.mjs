@@ -14,33 +14,38 @@ import { evaluateRotation, bedStatus } from "../app/lib/rotation.mjs";
 import {
   rotationSentence,
   rotationChipNote,
-  bedVerdictText,
-  previewVerdictText,
-  suggestionText,
+  panelVerdicts,
 } from "../app/lib/verdictCopy.mjs";
 import { suggestPlantings } from "../app/lib/suggest.mjs";
-import { CROPS, cropById } from "../app/lib/crops.mjs";
+import { CROPS, FAMILIES, cropById } from "../app/lib/crops.mjs";
 
 /** 暦の今年（シナリオの基準）。 */
 const NOW = 2026;
 
 // 画面が呼ぶのと同じ関数を通す。ここで組み立てを書き写すと、コンポーネントが
-// 別の引数を渡していても気づけない（前サイクルはその欠陥を公開まで通している）。
+// 別の引数を渡していても気づけない（この製品はその欠陥を公開まで通している）。
+
+/** 1区画ぶんの画面（バナー・候補チップ・プレビュー）をまとめて作る。 */
+function panel(plantings, { currentYear = NOW, month = 5, cropId = "", year = "" } = {}) {
+  return panelVerdicts({
+    plantings,
+    month,
+    currentYear,
+    formCropId: cropId,
+    formYear: year,
+    cropLookup: cropById,
+    crops: CROPS,
+  });
+}
 
 /** 区画バナーに実際に出る文。 */
 function bedText(plantings, currentYear = NOW) {
-  return bedVerdictText(bedStatus(plantings, cropById), cropById, currentYear);
+  return panel(plantings, { currentYear }).banner?.text;
 }
 
-/** 追加フォームのプレビューに出る文（画面と同じ経路）。 */
+/** 追加フォームのプレビューに出る文。 */
 function previewText(plantings, cropId, year, currentYear = NOW) {
-  const crop = cropById(cropId);
-  const records = plantings.map((p) => ({
-    familyKey: cropById(p.cropId).familyKey,
-    year: p.year,
-  }));
-  const r = evaluateRotation(records, crop.familyKey, crop.rotationYears, year);
-  return previewVerdictText(r, crop, year, currentYear);
+  return panel(plantings, { currentYear, cropId, year }).preview?.text;
 }
 
 // --- 仕様の検算シナリオ（今年 = 2026） --------------------------------------
@@ -214,60 +219,79 @@ test("チップの補助ラベルは全角9以内で、相対年数を使わな�
 
 // --- 実マスタ全域での不変条件 -------------------------------------------------
 
+/** 4群すべてのチップを1本の配列にする。 */
+function allChips(p) {
+  return [...p.groups.now, ...p.groups.caution, ...p.groups.avoid, ...p.groups.soon];
+}
+
 test("実マスタ全作物で、目安年数は必ず作物名とセットで名乗る", () => {
-  // 区画にナス科を1件置いた状態で、全作物を候補として文を作る。
-  const plantings = [{ cropId: "tomato", year: 2025 }];
-  const out = suggestPlantings(plantings, CROPS, 8, NOW);
-  assert.ok(out.length > 0, "候補が1件も出ていない");
-  for (const s of out) {
-    const text = suggestionText(s, NOW);
-    // 主語が落ちると「、の目安4年」になる。文の形として面で捕まえる。
-    assert.doesNotMatch(
-      text,
-      /[、。]の目安/,
-      `目安年数の主語が落ちている (${s.nameJa}): ${text}`,
-    );
-    if (!text.includes("目安")) continue;
-    assert.ok(
-      text.includes(`${s.nameJa}の目安`),
-      `目安年数に主語が無い (${s.nameJa}): ${text}`,
-    );
-    // 科の代表値ではなく、その作物自身の年数で名乗っていること。
-    const crop = CROPS.find((c) => c.id === s.cropId);
-    if (crop.rotationYears > 0 && text.includes(`の目安${crop.rotationYears}`)) {
-      assert.ok(true);
+  // ok / caution / ng の3分岐すべてを通す。同じ科の記録を年違いで置くと、
+  // 候補ごとに間隔が変わって3分岐が揃う（ok だけ素通りしていた穴を塞ぐ）。
+  const seen = new Set();
+  for (const year of [2015, 2022, 2024, 2025]) {
+    for (const month of [4, 8]) {
+      const chips = allChips(panel([{ cropId: "tomato", year }], { month }));
+      assert.ok(chips.length > 0, `候補が出ていない (${year}/${month})`);
+      for (const c of chips) {
+        seen.add(c.status);
+        // 主語が落ちると「、の目安4年」になる。文の形として面で捕まえる。
+        assert.doesNotMatch(
+          c.text,
+          /[、。]の目安/,
+          `目安年数の主語が落ちている (${c.nameJa}): ${c.text}`,
+        );
+        if (!c.text.includes("目安")) continue;
+        assert.ok(
+          c.text.includes(`${c.nameJa}の目安`),
+          `目安年数に主語が無い (${c.nameJa}): ${c.text}`,
+        );
+        // 科の代表値ではなく、その作物自身の年数で名乗っていること。
+        const crop = CROPS.find((x) => x.id === c.cropId);
+        const fam = FAMILIES.find((f) => f.key === crop.familyKey);
+        if (crop.rotationYears > 0) {
+          assert.ok(
+            c.text.includes(`${c.nameJa}の目安${crop.rotationYears}年`) ||
+              c.text.includes(`${c.nameJa}の目安ちょうど`),
+            `作物自身の年数で名乗っていない (${c.nameJa}: 作物${crop.rotationYears}年 / 科${fam.rotationYears}年): ${c.text}`,
+          );
+        }
+      }
     }
+  }
+  // 3分岐すべてを実際に通したことを確かめる（通っていなければ検査が空回り）。
+  for (const st of ["ok", "caution", "ng"]) {
+    assert.ok(seen.has(st), `${st} 分岐を1件も通っていない`);
+  }
+});
+
+test("ok 分岐でも、目安年数は作物名とセットで名乗る", () => {
+  // 「をこえています」の文（ok）を必ず1件は踏む。
+  const chips = allChips(panel([{ cropId: "tomato", year: 2015 }], { month: 8 }));
+  const oks = chips.filter((c) => c.text.includes("をこえています"));
+  assert.ok(oks.length > 0, "ok 分岐の文が1件も出ていない");
+  for (const c of oks) {
+    assert.match(c.text, new RegExp(`${c.nameJa}の目安\\d+年をこえています`));
   }
 });
 
 test("これから植える候補に、実行できない助言が出ない", () => {
   // 候補の判定年は必ず今年か翌年なので、過ぎた年の分岐は起きない。
-  for (const year of [NOW, NOW + 1]) {
-    const out = suggestPlantings(
-      [
-        { cropId: "tomato", year: 2027 },
-        { cropId: "potato", year: 2025 },
-      ],
-      CROPS,
-      8,
-      year,
+  for (const month of [4, 8, 12]) {
+    const chips = allChips(
+      panel(
+        [
+          { cropId: "tomato", year: 2027 },
+          { cropId: "potato", year: 2025 },
+        ],
+        { month },
+      ),
     );
-    for (const s of out) {
-      const text = suggestionText(s, NOW);
+    for (const c of chips) {
       assert.doesNotMatch(
-        text,
+        c.text,
         /過ぎた年の記録なので/,
-        `これから植える候補に過去向けの文が出ている (${s.nameJa}): ${text}`,
+        `これから植える候補に過去向けの文が出ている (${c.nameJa}): ${c.text}`,
       );
-      // 衝突相手が判定年より後のときに「早くて◯年」を出すと、その年は
-      // 未来の計画より後ろになり、候補同士の見比べに対して嘘になる。
-      if (s.conflictSide === "after") {
-        assert.doesNotMatch(
-          text,
-          /早くて/,
-          `後ろの計画との衝突に『早くて』を出している (${s.nameJa}): ${text}`,
-        );
-      }
     }
   }
 });

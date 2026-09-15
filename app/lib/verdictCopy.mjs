@@ -15,9 +15,14 @@
 //   面ごとに文を書くと食い違うので、面の差は「同じ科の記録が無いときの文」と
 //   「どこを見てほしいか（hereLabel）」の2つだけを引数で渡す形に閉じてある。
 
+import { bedStatus, evaluateRotation } from "./rotation.mjs";
+import { suggestPlantings, groupSuggestions } from "./suggest.mjs";
+
 /**
  * @typedef {import("./types").RotationStatus} RotationStatus
  * @typedef {import("./types").ConflictSide} ConflictSide
+ * @typedef {import("./types").PanelChip} PanelChip
+ * @typedef {import("./types").PanelGroups} PanelGroups
  */
 
 /**
@@ -177,69 +182,122 @@ export function rotationChipNote(facts) {
 }
 
 /**
- * 区画バナーに出す文。bedStatus の結果から、作物名と判定年の取り出しまでを含めて
- * ここで完結させる。
+ * 1区画ぶんの「画面に出る文」をすべてここで作る。
  *
- * この組み立てをコンポーネント側に置くと、どの引数を渡したかを検査する手段が
- * JSX を描画することしか無くなる。実際に一度、経路ごとに違う値を渡していた欠陥が
- * 全テスト緑のまま公開まで通っている（区画バナーだけが「2026年 トマト」と表示した
- * 直下で「2026年までに記録はありません」と言う状態）。
+ * ■ なぜ3面をまとめて1つの関数にするか
+ *   面ごとにコンポーネント側で引数を組み立てていた間、**判定年をどこから採るかを
+ *   取り違えても全ゲートが緑のまま通った**（型・lint・テスト・書き出し検査のどれも
+ *   `app/components/` を見ていないため）。実際にこの製品は過去に、経路ごとに違う値を
+ *   渡す欠陥を全テスト緑のまま公開している。
+ *   判定年の決め方（バナー＝最新作付けの年／チップ＝その候補の targetYear／
+ *   プレビュー＝入力欄の年）をこの関数の内側に閉じ込めると、取り違えは
+ *   コンポーネントからは起こせなくなり、`node --test` だけで固定できる。
  *
- * @param {import("./types").BedRotation} bed bedStatus の結果
- * @param {(cropId: string) => ({nameJa?: string} | undefined)} cropLookup
- * @param {number} currentYear 暦の今年
- * @returns {string | null} 判定を出さない区画（作付けなし・判定不能）は null
+ * 呼び出し側（BedEditor / PlantNow）は、返ってきた文をそのまま描くだけにする。
+ *
+ * @param {Object} input
+ * @param {{cropId: string, year: number}[]} input.plantings 区画の作付け
+ * @param {number} input.month 暦月（1-12）
+ * @param {number} input.currentYear 暦の今年
+ * @param {string} input.formCropId 追加フォームで選択中の作物 id（未選択は ""）
+ * @param {number | ""} input.formYear 追加フォームの年入力（空欄可）
+ * @param {(cropId: string) => (any | undefined)} input.cropLookup
+ * @param {any[]} input.crops 作物マスタ
+ * @returns {{
+ *   banner: {status: RotationStatus, text: string, latestCropId: string, latestYear: number} | null,
+ *   unknownCropText: string | null,
+ *   groups: PanelGroups,
+ *   totalChips: number,
+ *   preview: {crop: any, status: RotationStatus, text: string, targetYear: number} | null,
+ * }}
  */
-export function bedVerdictText(bed, cropLookup, currentYear) {
-  if (bed.status === "empty") return null;
-  const name = bed.latestCropId
-    ? (cropLookup(bed.latestCropId)?.nameJa ?? "")
-    : "";
-  return rotationSentence(
-    { ...bed, status: bed.status },
-    {
-      cropName: name,
-      // 区画の判定は「最新の作付け」に対して行うので、その年が判定年。
-      judgedYear: bed.latestYear ?? currentYear,
-      currentYear,
-      face: "bed",
+export function panelVerdicts(input) {
+  const { plantings, month, currentYear, formCropId, formYear, cropLookup, crops } =
+    input;
+
+  const bed = bedStatus(plantings, cropLookup);
+
+  // --- 区画バナー: 判定年は「最新作付けの年」。ここ以外から採らない。
+  let banner = null;
+  if (bed.status !== "empty") {
+    const name = bed.latestCropId
+      ? (cropLookup(bed.latestCropId)?.nameJa ?? "")
+      : "";
+    banner = {
+      status: bed.status,
+      text: rotationSentence(
+        { ...bed, status: bed.status },
+        {
+          cropName: name,
+          judgedYear: bed.latestYear ?? currentYear,
+          currentYear,
+          face: "bed",
+        },
+      ),
+      latestCropId: bed.latestCropId ?? "",
+      latestYear: bed.latestYear ?? currentYear,
+    };
+  }
+
+  // --- 候補チップ: 判定年は各候補の targetYear。閲覧年ではない
+  //     （12月に見た「翌月」は翌年になる）。
+  const suggestions = suggestPlantings(plantings, crops, month, currentYear);
+  const grouped = groupSuggestions(suggestions);
+  /** @param {any[]} list */
+  const decorate = (list) =>
+    list.map((s) => ({
+      ...s,
+      text: rotationSentence(s, {
+        cropName: s.nameJa,
+        judgedYear: s.targetYear,
+        currentYear,
+        face: "chip",
+      }),
+      note: rotationChipNote(s),
+    }));
+
+  // --- プレビュー: 判定年は入力欄の年（空欄なら今年）。過去も未来も来る。
+  let preview = null;
+  const crop = formCropId ? cropLookup(formCropId) : undefined;
+  if (crop) {
+    const judgedYear = formYear === "" ? currentYear : formYear;
+    const records = plantings
+      .map((p) => {
+        const c = cropLookup(p.cropId);
+        return c ? { familyKey: c.familyKey, year: p.year } : null;
+      })
+      .filter((x) => x !== null);
+    const result = evaluateRotation(
+      /** @type {any[]} */ (records),
+      crop.familyKey,
+      crop.rotationYears,
+      judgedYear,
+    );
+    preview = {
+      crop,
+      status: result.status,
+      targetYear: judgedYear,
+      text: rotationSentence(result, {
+        cropName: crop.nameJa,
+        judgedYear,
+        currentYear,
+        face: "preview",
+      }),
+    };
+  }
+
+  return {
+    banner,
+    unknownCropText: bed.unknownCrop ? UNKNOWN_CROP_TEXT : null,
+    groups: {
+      now: decorate(grouped.now),
+      caution: decorate(grouped.caution),
+      avoid: decorate(grouped.avoid),
+      soon: decorate(grouped.soon),
     },
-  );
-}
-
-/**
- * 候補チップに出す文。候補は「これから植える場合」なので判定年は targetYear。
- * （閲覧年ではない。12月に見た「翌月」は翌年になる。）
- *
- * @param {import("./types").Suggestion} suggestion
- * @param {number} currentYear 暦の今年
- * @returns {string}
- */
-export function suggestionText(suggestion, currentYear) {
-  return rotationSentence(suggestion, {
-    cropName: suggestion.nameJa,
-    judgedYear: suggestion.targetYear,
-    currentYear,
-    face: "chip",
-  });
-}
-
-/**
- * 追加フォームのプレビューに出す文。判定年は入力欄の年で、過去も未来も来る。
- *
- * @param {import("./types").RotationResult} result
- * @param {{nameJa: string}} crop 選択中の作物
- * @param {number} judgedYear 入力欄の年
- * @param {number} currentYear 暦の今年
- * @returns {string}
- */
-export function previewVerdictText(result, crop, judgedYear, currentYear) {
-  return rotationSentence(result, {
-    cropName: crop.nameJa,
-    judgedYear,
-    currentYear,
-    face: "preview",
-  });
+    totalChips: suggestions.length,
+    preview,
+  };
 }
 
 /** 最新作付けの作物が作物マスタに無いときの、区画バナーの文。 */
