@@ -210,10 +210,16 @@ test("同じ科の記録が無いときの文は、面ごとに前提が違う",
     }),
     "ナス科の記録はこの2026年のトマトだけなので、連作にはなっていません。",
   );
-  // bed 面で同科が無い状態には構造上到達しない。無言で空文字を返さず落ちること。
-  assert.throws(() =>
-    rotationSentence(facts, { ...ctx, face: "bed", sameFamilyCount: 2 }),
-  );
+  // bed 面で同科が無い状態には構造上到達しない（下の総当たりで固定している）。
+  // 万一到達しても、無言の空文字にも例外（＝静的公開物では白画面）にもせず、
+  // 正直な非空文を返すこと。
+  const fallback = rotationSentence(facts, {
+    ...ctx,
+    face: "bed",
+    sameFamilyCount: 2,
+  });
+  assert.ok(fallback.length > 0, "空文字を返している");
+  assert.match(fallback, /判定を出せませんでした/);
 });
 
 test("レバーが無いときの誘導先は、その面から見た場所を指す", () => {
@@ -505,7 +511,15 @@ test("バナーで同じ科の記録が無いのは、判定対象1件だけの�
 
 /** 未知 cropId を色々な位置に差し込んだ区画を総当たりする。 */
 function forEachUndecidablePanel(fn) {
-  const ids = CROPS.slice(0, 8).map((c) => c.id);
+  // ⚠️ 目安0年の作物を必ず含める。連作の縛りが無い科は、判定に入れられない記録が
+  //    あっても結論が変わらないので、扱いが他と違う。ここが抜けていたため、
+  //    「目安0年でも判定できませんと名乗る」誤りを素通りさせた。
+  const ids = [
+    ...CROPS.slice(0, 6).map((c) => c.id),
+    "corn",
+    "sweet-potato",
+    "mint",
+  ];
   let count = 0;
   for (const unknownYear of [2018, 2024, 2026, 2030]) {
     for (const knownYear of [2020, 2026, 2028]) {
@@ -568,15 +582,101 @@ test("但し書きが無いまま「記録はありません」と断定する�
 });
 
 test("判定に入れられない記録がある区画は、植え付けOKを名乗らない", () => {
-  // その記録が連作かもしれないので「OK」は overclaim。既知の caution / ng は
-  // 判定できないことを理由に消さない（警告を消すほうが危険）。
+  // 判定に入れられない記録は、判定を良くすることはなく悪くすることしかできない
+  // （同じ科なら最も近い同科の年は近づくだけ）。だから:
+  //   ok   … 安全の主張なので成立しない → unknown
+  //   caution / ng … 既知の違反は本物なので残す（警告を消すほうが危険）
+  //   目安0年の科 … 未知の記録が何であっても結論が変わらないので ok のまま
+  let sawZero = 0;
+  let sawDowngrade = 0;
   forEachUndecidablePanel((p, plantings) => {
     const bed = bedStatus(plantings, cropById);
     if (bed.undecidableYears.length === 0) return;
-    if (bed.status === "ok" || bed.status === "empty") {
+    if (bed.unknownCrop) {
+      assert.equal(p.badgeStatus, "unknown", JSON.stringify(plantings));
+    } else if (bed.requiredYears <= 0) {
+      sawZero++;
+      assert.equal(p.badgeStatus, bed.status, JSON.stringify(plantings));
+    } else if (bed.status === "ok") {
+      sawDowngrade++;
       assert.equal(p.badgeStatus, "unknown", JSON.stringify(plantings));
     } else {
       assert.equal(p.badgeStatus, bed.status, JSON.stringify(plantings));
     }
   });
+  assert.ok(sawZero > 0, "目安0年の科を1件も通っていない");
+  assert.ok(sawDowngrade > 0, "ok から落とす配置を1件も通っていない");
+});
+
+test("バッジとバナーは、同じ区画に同じ状態を出す", () => {
+  // 上下に並ぶ2つの符号が別の状態を名乗ると、どちらを信じればよいか分からない。
+  // 導出が2箇所にあったせいで実際に割れたので、一致そのものを固定する。
+  let reached = 0;
+  const check = (p) => {
+    if (p.banner === null) return;
+    reached++;
+    assert.equal(p.badgeStatus, p.banner.status);
+  };
+  forEachPanel(check);
+  forEachUndecidablePanel(check);
+  assert.ok(reached > 1000, `検査に到達したパネルが少なすぎる: ${reached}`);
+});
+
+test("安全を主張する文にだけ、言い切れない旨を添える", () => {
+  forEachUndecidablePanel((p, plantings) => {
+    const bed = bedStatus(plantings, cropById);
+    if (bed.undecidableYears.length === 0 || bed.unknownCrop) return;
+    const t = p.banner.text;
+    if (bed.requiredYears <= 0) return;
+    if (bed.status === "ok") {
+      assert.match(t, /言い切れません。$/, t);
+    } else if (bed.status === "caution") {
+      assert.match(t, /間隔はこれより短いかもしれません。$/, t);
+    } else {
+      // ng の結論は覆らない。文を足さず、年を名指しする締めの前置きだけを直す。
+      assert.doesNotMatch(t, /言い切れません|短いかもしれません/, t);
+      if (/早くて\d{4}年です。$/.test(t)) {
+        assert.match(t, /いまある記録のうち判定に入れたぶんでは/, t);
+      }
+    }
+  });
+});
+
+test("但し書きは件数に合わせて単複を言い分ける", () => {
+  const one = panel([
+    { cropId: "not-a-crop", year: 2020 },
+    { cropId: "tomato", year: 2026 },
+  ]);
+  assert.match(one.undecidableNotice, /2020年の記録があります。/);
+  assert.match(one.undecidableNotice, /この記録は判定に入れていません。$/);
+
+  const many = panel([
+    { cropId: "not-a-crop", year: 2015 },
+    { cropId: "also-not", year: 2019 },
+    { cropId: "nor-this", year: 2022 },
+    { cropId: "tomato", year: 2026 },
+  ]);
+  // 3件あるのに「この記録は」と単数で言わない。
+  assert.match(many.undecidableNotice, /記録が3件（2015・2019・2022年）あります。/);
+  assert.match(many.undecidableNotice, /これらは判定に入れていません。$/);
+  assert.doesNotMatch(many.undecidableNotice, /この記録は/);
+});
+
+test("プレビューの但し書きは、候補群と同じ文を並べない", () => {
+  const p = panel([
+    { cropId: "not-a-crop", year: 2020 },
+    { cropId: "tomato", year: 2026 },
+  ]);
+  assert.notEqual(p.undecidableNotice, null);
+  assert.notEqual(p.undecidablePreviewNote, null);
+  // 320px で画面1枚ぶんが同じ注意書きになるのを避ける。
+  assert.notEqual(
+    p.undecidableNotice,
+    p.undecidablePreviewNote,
+    "同じ文を2枠に並べている",
+  );
+  assert.ok(
+    p.undecidablePreviewNote.length < p.undecidableNotice.length,
+    "プレビュー側が短くなっていない",
+  );
 });

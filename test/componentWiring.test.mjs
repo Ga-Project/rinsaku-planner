@@ -219,7 +219,7 @@ test("作物マスタに無い作付けは、理由を画面に出す", () => {
   const html = render([{ cropId: "not-a-crop", year: 2026 }]);
   assert.match(
     textOf(html, "verdict is-unknown"),
-    /2026年の作付けの作物が一覧にないため、この区画は判定できません。下の「作付けの記録」でその行を削除し、作物を選び直して追加してください。/,
+    /2026年の作付けの作物が一覧にありません。下の「作付けの記録」でその行を削除し、作物を選び直して追加してください。/,
   );
 });
 
@@ -288,6 +288,19 @@ test("グリッドと編集パネルは、同じ区画に同じ状態名を出�
   );
 });
 
+test("グリッドのセルは、記録があるのに作物未登録と言わない", () => {
+  // 作物が一覧に無いだけで記録はある。真に空の区画と同じ文字列にすると
+  // 「記録なし」と読めてしまう（同じセルのバッジは「判定できません」と出る）。
+  const withUnknown = renderGrid([{ cropId: "not-a-crop", year: 2026 }]);
+  assert.match(withUnknown, /作物不明（2026）/);
+  assert.doesNotMatch(withUnknown, /作物未登録/);
+
+  // 本当に記録が無い区画は従来どおり。
+  const empty = renderGrid([]);
+  assert.match(empty, /作物未登録/);
+  assert.doesNotMatch(empty, /作物不明/);
+});
+
 test("候補が0件の月でも、見出しと不在の説明は必ず描く", () => {
   // 締めの文が「「いま植えるなら」で確かめてください」と誘導するので、
   // ここをセクションごと消すとその文が宙に浮く。
@@ -308,11 +321,14 @@ test("判定に入れていない記録の但し書きは、候補群とプレ�
   // SSR では踏めない。ここだけはソースで「両方に渡していること」を固定する。
   // （描画で検査できないことを承知のうえの narrow なガード。）
   const src = readFileSync("app/components/BedEditor.tsx", "utf8");
-  const uses = [...src.matchAll(/panel\.undecidableNotice/g)].length;
-  assert.ok(
-    uses >= 2,
-    `但し書きの配り先が足りない（候補群とプレビューの2箇所が要る）: ${uses}`,
-  );
+  // 候補群は長文、プレビューは短い変種。同じ文を2枠並べると 320px で
+  // 画面1枚ぶんが同じ注意書きになるので、別の prop を渡している。
+  // 出現回数で見るのは、片方だけ差し替える退行を「どちらも登場する」で
+  // 通してしまわないため。
+  const longUses = [...src.matchAll(/panel\.undecidableNotice\b/g)].length;
+  const shortUses = [...src.matchAll(/panel\.undecidablePreviewNote\b/g)].length;
+  assert.equal(longUses, 1, `長文の配り先が1箇所でない: ${longUses}`);
+  assert.equal(shortUses, 2, `短い変種の配り先が2箇所でない: ${shortUses}`);
 });
 
 test("コンポーネントは判定文を自前で組み立てない", () => {

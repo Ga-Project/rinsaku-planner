@@ -72,6 +72,13 @@ export function BedGrid({
                   <IconSeedling className="bed-cell-seedling" />
                   {`${latest.nameJa}（${status.latestYear}）`}
                 </>
+              ) : status.latestYear !== null ? (
+                // 記録はあるが作物が一覧に無い。真に空の区画と同じ文言にすると
+                // 「記録なし」と読めてしまう。
+                <>
+                  <IconSeedling className="bed-cell-seedling" />
+                  {`作物不明（${status.latestYear}）`}
+                </>
               ) : (
                 "作物未登録"
               )}

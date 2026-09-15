@@ -78,6 +78,7 @@ const FACES = {
  * @param {"bed" | "chip" | "preview"} ctx.face どの面に出すか
  * @param {number} [ctx.sameFamilyCount] 区画の同じ科の作付け件数（bed 面でのみ使う）
  * @param {string} [ctx.familyJa] 判定に使った作物の科名（bed 面でのみ使う）
+ * @param {boolean} [ctx.hasUndecidable] 判定に入れられない記録があるか（bed 面でのみ使う）
  * @returns {string}
  */
 export function rotationSentence(facts, ctx) {
@@ -95,7 +96,17 @@ export function rotationSentence(facts, ctx) {
   //   全称的に語ると、同じ記録を数に入れる候補チップと真っ向から食い違う。
   //   （実測: 全称否定「ほかにありません」と、同じ記録を名指しするチップの同居が
   //    11,800パネル。基準点を名乗らない「間隔は◯年」の衝突が232パネル。）
+  // 判定に入れられない記録は、判定を良くすることはなく悪くすることしかできない
+  // （未知の記録が同じ科なら、最も近い同科の年は近づくだけ＝間隔は縮むだけ）。
+  // だから文を足すのは **安全を主張している箇所だけ** でよい。
+  const uncertain = ctx.face === "bed" && ctx.hasUndecidable === true;
+
   if (ctx.face === "bed" && ctx.sameFamilyCount === 1) {
+    if (uncertain) {
+      // 「〜だけなので、連作にはなっていません」に但し書きを足すと、同じ述語を
+      // 隣接文で断定してから撤回することになる。本文ごと差し替える。
+      return `判定に入れた記録のうち、${ctx.familyJa ?? "同じ科"}の作付けはこの${ctx.judgedYear}年の${ctx.cropName}だけです。${UNDECIDABLE_CAVEAT}`;
+    }
     // 科を先に名乗る。「同じ科」と書くと先行詞が同じ文の後ろに来るうえ、
     // 別の科の記録がある区画では「作付けは1件だけ」が記録一覧と食い違って読める。
     // 連作でないことは1文に畳む（バッジ・アイコン・緑地で既に符号化されている）。
@@ -105,11 +116,11 @@ export function rotationSentence(facts, ctx) {
   const near = facts.nearestSameFamilyYear;
   if (near === null || facts.gapYears === null || facts.conflictSide === null) {
     if (face.empty === null) {
-      // bed 面はここに来ない（同科は必ず判定対象自身を含む）。無言で空文字を
-      // 返すと本文の無いバナーが描かれるので、気づける形で落とす。
-      throw new Error(
-        `rotationSentence: ${ctx.face} 面で同じ科の記録が無い状態に到達した`,
-      );
+      // bed 面はここに来ない（同科は必ず判定対象自身を含む）。到達不能性は
+      // テストで固定してある。万一到達しても、無言の空文字（本文の無いバナー）に
+      // も例外（静的公開物にエラーバウンダリが無いので白画面）にもせず、
+      // 正直な非空文を返す。
+      return "この区画の判定を出せませんでした。";
     }
     // 科の分からない記録がある区画でも、ここは候補ごとの判定を語る。
     // 「判定に入れていない記録がある」ことは群の上に1行だけ置く（undecidableNotice）。
@@ -154,8 +165,19 @@ export function rotationSentence(facts, ctx) {
   // 〔3〕締め。ok / caution では出さない。
   //      caution に助言を足すと、衝突相手が判定年より後にあるとき
   //      「もう1年あける」が必ず逆向きになる（間隔が縮んで ng に落ちる）。
-  if (facts.status !== "ng") return basis + slot1 + slot2;
+  if (facts.status !== "ng") {
+    // ok は「目安をこえています」という安全の断定なので但し書きが要る。
+    // caution は警告としては成立しており、危ういのは「ちょうど」という数字だけ。
+    const caveat = !uncertain
+      ? ""
+      : facts.status === "ok"
+        ? UNDECIDABLE_CAVEAT
+        : "ただし判定に入れていない記録があるので、間隔はこれより短いかもしれません。";
+    return basis + slot1 + slot2 + caveat;
+  }
 
+  // ng の結論は未知の記録では覆らない（単調）。危ういのは名指しした年だけなので、
+  // 締めの前置きだけを直す。文を足すと最長バナーが 320px で行数を超える。
   return basis + slot1 + slot2 + closing(facts, ctx, near, req, face.here);
 }
 
@@ -230,7 +252,11 @@ function closing(facts, ctx, near, req, here) {
     // 算出されるため。衝突相手が過去でも、別の未来の計画が next を押し出している
     // ことがあり、この一句だけが名指しした年を全ての配置で真にする。
     // 「{next}年からです」とは書かない。next の後ろが塞がっている配置が実在する。
-    return `いまある記録のままだと、どの作付けからも${req}年あくのは早くて${next}年です。`;
+    const preamble =
+      ctx.face === "bed" && ctx.hasUndecidable === true
+        ? "いまある記録のうち判定に入れたぶんでは"
+        : "いまある記録のままだと";
+    return `${preamble}、どの作付けからも${req}年あくのは早くて${next}年です。`;
   }
   return noLeverAdvice(here, judged, near);
 }
@@ -295,7 +321,7 @@ export function rotationChipNote(facts) {
 export function unknownCropText(year) {
   // 「登録し直す」操作はその場に無い（記録の行にあるのは削除だけ）。実際に要る
   // 2手をそのまま言う。
-  return `${year}年の作付けの作物が一覧にないため、この区画は判定できません。下の「作付けの記録」でその行を削除し、作物を選び直して追加してください。`;
+  return `${year}年の作付けの作物が一覧にありません。下の「作付けの記録」でその行を削除し、作物を選び直して追加してください。`;
 }
 
 /**
@@ -315,9 +341,17 @@ export function unknownCropText(year) {
  */
 export function bedBadgeStatus(bed) {
   if (bed.unknownCrop) return "unknown";
+  if (bed.status === "empty") return "empty";
   if (bed.undecidableYears.length === 0) return bed.status;
-  return bed.status === "ok" || bed.status === "empty" ? "unknown" : bed.status;
+  // 目安0年の科は、判定に入れられない記録が何であっても結論が変わらない。
+  // ここを落とすと「判定できます」という事実まで捨てることになる。
+  if (bed.requiredYears <= 0) return bed.status;
+  return bed.status === "ok" ? "unknown" : bed.status;
 }
+
+/** 判定に入れていない記録があることを、安全を主張している文に添える一句。 */
+const UNDECIDABLE_CAVEAT =
+  "ただし判定に入れていない記録があるので、連作になっていないとは言い切れません。";
 
 /**
  * 1区画ぶんの「画面に出る文」をすべてここで作る。
@@ -346,6 +380,7 @@ export function bedBadgeStatus(bed) {
  *   badgeStatus: RotationStatus | "empty" | "unknown",
  *   undecidableYears: number[],
  *   undecidableNotice: string | null,
+ *   undecidablePreviewNote: string | null,
  *   unknownCropText: string | null,
  *   groups: PanelGroups,
  *   totalChips: number,
@@ -360,10 +395,19 @@ export function panelVerdicts(input) {
   // 判定に入れられなかった記録の年（全件）。最新1件だけを見ると、古い年に混ざった
   // 未知の記録を3つの経路が無言で捨て、画面が「記録はありません」と断定してしまう。
   const undecidableYears = bed.undecidableYears;
+  const years = undecidableYears.join("・");
   const undecidableNotice =
-    undecidableYears.length > 0
-      ? `この区画には、作物が一覧にない${undecidableYears.join("・")}年の記録があります。その科が分からないので、この記録は判定に入れていません。`
-      : null;
+    undecidableYears.length === 0
+      ? null
+      : undecidableYears.length === 1
+        ? `この区画には、作物が一覧にない${years}年の記録があります。その科が分からないので、この記録は判定に入れていません。`
+        : `この区画には、作物が一覧にない記録が${undecidableYears.length}件（${years}年）あります。科が分からないので、これらは判定に入れていません。`;
+  // プレビューにも届ける必要があるが、候補群の上と同じ文を並べると 320px で
+  // 画面1枚ぶんが同じ注意書きになる（実測 507px）。ここは短い変種にする。
+  const undecidablePreviewNote =
+    undecidableYears.length === 0
+      ? null
+      : `この判定にも、一覧にない${years}年の記録は入っていません。`;
 
   // --- 区画バナー: 判定年は「最新作付けの年」。ここ以外から採らない。
   let banner = null;
@@ -372,7 +416,9 @@ export function panelVerdicts(input) {
       ? (cropLookup(bed.latestCropId)?.nameJa ?? "")
       : "";
     banner = {
-      status: bed.status,
+      // バッジと同じ導出を通す。上下に並ぶ2つの符号が別の状態を名乗ると、
+      // どちらを信じればよいか利用者が判断できない。
+      status: bedBadgeStatus(bed),
       text: rotationSentence(
         { ...bed, status: bed.status },
         {
@@ -381,6 +427,7 @@ export function panelVerdicts(input) {
           currentYear,
           face: "bed",
           sameFamilyCount: bed.sameFamilyCount,
+          hasUndecidable: undecidableYears.length > 0,
           familyJa: bed.latestCropId
             ? cropLookup(bed.latestCropId)?.familyJa
             : undefined,
@@ -445,6 +492,7 @@ export function panelVerdicts(input) {
     badgeStatus: bedBadgeStatus(bed),
     undecidableYears,
     undecidableNotice,
+    undecidablePreviewNote,
     unknownCropText: bed.unknownCrop
       ? unknownCropText(bed.latestYear ?? currentYear)
       : null,

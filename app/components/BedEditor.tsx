@@ -214,10 +214,12 @@ export function BedEditor({
           {/* 但し書きはチップ群の上にもあるが、プレビューはその下にあるので
               ここにも届ける（下だけを見ている人に、判定に入れていない記録がある
               ことが伝わらない）。 */}
-          {panel.undecidableNotice !== null && (
+          {/* 候補群の上と同じ文を並べると、320px で画面1枚ぶんが同じ注意書きに
+              なる。ここは「この判定にも入っていない」だけを短く言う。 */}
+          {panel.undecidablePreviewNote !== null && (
             <Verdict
               status="unknown"
-              text={panel.undecidableNotice}
+              text={panel.undecidablePreviewNote}
               live={false}
             />
           )}

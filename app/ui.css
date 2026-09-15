@@ -224,7 +224,9 @@ select:focus {
 .bed-state {
   display: inline-flex;
   align-items: center;
-  gap: var(--sp-1);
+  /* 「判定できません」は2列グリッドの 320px で内幅を 1px 超えて2行になる。
+     語を短くすると編集パネルのバッジと揃わなくなるので、間隔側で詰める。 */
+  gap: 2px;
   font-size: var(--fs-xs);
   font-weight: var(--fw-bold);
   line-height: 1.2;
@@ -303,9 +305,9 @@ select:focus {
 /* 判定できない状態。危険でも安全でもないので、セマンティック色は当てず
    沈み面で「情報が足りない」ことを示す。形と文言は他の状態と同じ枠に乗せる。 */
 .verdict.is-unknown {
+  /* 親が沈み面のときは地の差が出ない（実測 1.00:1）。面を作っているのは枠線で、
+     こちらは 4.53:1 以上を確保してある。地は据え置き。 */
   background: var(--surface-sunken);
-  /* 地とカードの差は 1.02:1 しかないので、境界は枠が持つ。--border-strong では
-     カードに対して 1.38:1 で面が立たない。 */
   border-color: var(--text-dim);
   color: var(--text);
 }
