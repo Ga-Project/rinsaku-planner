@@ -106,11 +106,14 @@ export function PlantNow({
   month,
   year,
   selectedCropId,
+  undecidableYear,
   onPick,
 }: {
   /** 判定ずみの候補（文・補助ラベルは組み立て済み）。ここでは作らない。 */
   groups: PanelGroups;
   total: number;
+  /** 科が分からず判定に入れていない記録の年（無ければ null）。 */
+  undecidableYear: number | null;
   month: number;
   year: number;
   selectedCropId: string;
@@ -143,6 +146,15 @@ export function PlantNow({
           <p className="muted plantnow-scope">
             これから植える場合の判定 ── {year}年{monthLabel}
           </p>
+          {/* 下の判定が数えていない記録があることを、群見出しより先に言う。
+              これが無いと「この区画に植えられます」が、科の分からない記録を
+              勘定に入れたうえでの断定に読める。 */}
+          {undecidableYear !== null && (
+            <p className="verdict is-unknown" role="status">
+              この区画には、作物が一覧にない{undecidableYear}
+              年の記録があります。その科が分からないので、下の判定はこの記録を数えていません。
+            </p>
+          )}
           <p className="muted plantnow-lead">
             {hasThisMonth
               ? `${monthLabel}が適期の野菜を、これから植えるものとして、この区画の作付けの記録に照らして並べています。選ぶと下の作付けフォームに入ります。`

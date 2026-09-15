@@ -200,10 +200,19 @@ test("同じ科の記録が無いときの文は、面ごとに前提が違う",
     "この区画に、同じ科の作付けの記録はありません。",
   );
   // バナーは判定対象自身を外して数えるので、この文を出してはいけない。
-  // 同科が判定対象1件だけのときは、その1件を名指しする専用の文になる。
+  // 同科が判定対象1件だけのときは、その1件を科ごと名指しする専用の文になる。
   assert.equal(
-    rotationSentence(facts, { ...ctx, face: "bed", sameFamilyCount: 1 }),
-    "この区画に記録した同じ科の作付けは、この2026年のトマト1件だけです。この作付けは連作になっていません。",
+    rotationSentence(facts, {
+      ...ctx,
+      face: "bed",
+      sameFamilyCount: 1,
+      familyJa: "ナス科",
+    }),
+    "ナス科の記録はこの2026年のトマトだけなので、連作にはなっていません。",
+  );
+  // bed 面で同科が無い状態には構造上到達しない。無言で空文字を返さず落ちること。
+  assert.throws(() =>
+    rotationSentence(facts, { ...ctx, face: "bed", sameFamilyCount: 2 }),
   );
 });
 
@@ -402,17 +411,36 @@ function forEachPanel(fn) {
   return count;
 }
 
-test("バナーが同じ科の不在を主張している隣で、チップが同じ科を名指ししない", () => {
-  forEachPanel((p) => {
-    const banner = p.banner.text;
-    if (!/ありません/.test(banner)) return;
-    const named = allChips(p).filter((c) => c.nearestSameFamilyYear !== null);
-    assert.equal(
-      named.length,
-      0,
-      `バナー「${banner}」の隣でチップが記録を名指ししている: ${named[0]?.text}`,
+test("バナーが名指しできる同科が無い状態でも、チップと食い違わない", () => {
+  // ⚠️ ゲートを文面の針（/ありません/ 等）で書くと、文面を別の言い方に変えた
+  //    瞬間に1件も到達しなくなり、検査が静かに空振りする。入口は構造で書く。
+  let reached = 0;
+  forEachPanel((p, plantings) => {
+    const bed = bedStatus(plantings, cropById);
+    // バナーは判定対象自身を履歴から外すので、同科がその1件だけだと名指しできる
+    // 年が無くなる。チップは同じ記録を数えるので、ここが食い違いの発生点。
+    if (bed.nearestSameFamilyYear !== null) return;
+    reached++;
+
+    // バナーはその1件を年で名乗る（不在を断定しない）。
+    assert.match(
+      p.banner.text,
+      new RegExp(`${bed.latestYear}年`),
+      `バナーが判定対象の年を名乗っていない: ${p.banner.text}`,
     );
+
+    // 同じ科のチップが名指しする年は、その1件以外にありえない。
+    for (const c of allChips(p)) {
+      if (c.familyKey !== bed.familyKey) continue;
+      if (c.nearestSameFamilyYear === null) continue;
+      assert.equal(
+        c.nearestSameFamilyYear,
+        bed.latestYear,
+        `チップがバナーの知らない年を名指ししている: ${c.text}`,
+      );
+    }
   });
+  assert.ok(reached > 100, `検査に到達したパネルが少なすぎる: ${reached}`);
 });
 
 test("バナーは区画全体についての全称的な言い方をしない", () => {
@@ -425,23 +453,22 @@ test("バナーは区画全体についての全称的な言い方をしない",
 });
 
 test("同じ科が2件以上あるバナーは、どの作付けから見た間隔かを名乗る", () => {
-  forEachPanel((p) => {
-    const facts = bedStatus(
-      p.banner.latestCropId
-        ? [{ cropId: p.banner.latestCropId, year: p.banner.latestYear }]
-        : [],
-      cropById,
-    );
-    void facts;
-    const t = p.banner.text;
-    if (!/間隔は|間隔があかない/.test(t)) return;
-    if (/^\d{4}年には、/.test(t)) return; // 同年重複は両面とも間隔0で一致する
+  // ゲートは事実側で書く。文面（「間隔は」等）を針にすると、言い回しを変えた
+  // ついでに基準点を落とす変更で空振りする。
+  let reached = 0;
+  forEachPanel((p, plantings) => {
+    const bed = bedStatus(plantings, cropById);
+    if (bed.sameFamilyCount < 2) return;
+    // 同年重複は両面とも間隔0で一致するので、基準点を名乗る必要がない。
+    if (bed.conflictSide === "same") return;
+    reached++;
     assert.match(
-      t,
-      /^この\d{4}年の.+から見ると、/,
-      `基準点を名乗らずに間隔を述べている: ${t}`,
+      p.banner.text,
+      new RegExp(`^この${bed.latestYear}年の.+から見ると、`),
+      `基準点を名乗らずに間隔を述べている: ${p.banner.text}`,
     );
   });
+  assert.ok(reached > 100, `検査に到達したパネルが少なすぎる: ${reached}`);
 });
 
 test("バナーで同じ科の記録が無いのは、判定対象1件だけの区画に限る", () => {

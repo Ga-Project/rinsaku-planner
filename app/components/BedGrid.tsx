@@ -61,7 +61,12 @@ export function BedGrid({
             <span className="bed-cell-label">{bed.label || "区画"}</span>
             {latest && <span className="bed-cell-fam" aria-hidden="true" />}
             <span className="bed-cell-kind">{KIND_LABEL[bed.kind]}</span>
-            <StateBadge status={status.status} />
+            {/* 編集パネルと同じ根拠で出す。片方だけ unknown にすると、同じ区画に
+                ついてグリッドが「未設定」、パネルが「判定できません」と別の状態名を
+                同時に名乗ることになる。 */}
+            <StateBadge
+              status={status.unknownCrop ? "unknown" : status.status}
+            />
             <span className="bed-cell-crop">
               {latest ? (
                 <>

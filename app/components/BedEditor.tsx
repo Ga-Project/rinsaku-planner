@@ -2,7 +2,6 @@
 
 import { useMemo, useRef, useState } from "react";
 import type { Bed, BedKind, PanelChip } from "../lib/types";
-import { bedStatus } from "../lib/rotation.mjs";
 import { CROPS, cropById, cropsGroupedByFamily } from "../lib/crops.mjs";
 import { summarizeMonths } from "../lib/schedule.mjs";
 import { panelVerdicts } from "../lib/verdictCopy.mjs";
@@ -54,9 +53,6 @@ export function BedEditor({
     [bed.plantings, currentMonth, currentYear, cropId, year],
   );
 
-  // 区画グリッドのバッジと同じ状態値（文は panel が持つ）。
-  const status = bedStatus(bed.plantings, cropById);
-
   function handleAdd() {
     if (!cropId) return;
     onAddPlanting(cropId, year === "" ? currentYear : year);
@@ -67,9 +63,7 @@ export function BedEditor({
     <div className="bed-editor card">
       <div className="section-head">
         <h3 style={{ marginTop: 0 }}>区画の編集</h3>
-        <StateBadge
-          status={panel.unknownCropText !== null ? "unknown" : status.status}
-        />
+        <StateBadge status={panel.badgeStatus} />
       </div>
 
       <div className="field">
@@ -121,6 +115,7 @@ export function BedEditor({
       <PlantNow
         groups={panel.groups}
         total={panel.totalChips}
+        undecidableYear={panel.undecidableYear}
         month={currentMonth}
         year={currentYear}
         selectedCropId={cropId}

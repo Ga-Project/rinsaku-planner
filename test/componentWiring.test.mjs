@@ -29,7 +29,7 @@ import { createElement as h } from "react";
 
 /** 生成物の置き場。app/ と同じ深さに置くので `../lib/*.mjs` がそのまま解決できる。 */
 const BUILD = "app/.test-build";
-const FILES = ["BedEditor", "PlantNow", "status-ui", "icons"];
+const FILES = ["BedEditor", "BedGrid", "PlantNow", "status-ui", "icons"];
 
 /** @type {Record<string, any>} */
 const mod = {};
@@ -183,33 +183,97 @@ test("チップが名乗る年は、その候補を植えることになる年�
   );
 });
 
-test("チップの可視ラベルは、作物マスタの科名をそのまま出す", () => {
-  // この層は tsc / lint / lib のテストのどれからも見えない。可視ラベルを
-  // 黙って差し替える・切り詰める変更をここで捕まえる。
-  const html = render([], { currentMonth: 8 });
-  const families = [
-    ...html.matchAll(/<span class="plantnow-chip-family">([^<]*)<\/span>/g),
-  ].map((m) => m[1]);
-  assert.ok(families.length > 0, "チップが描かれていない");
-  const known = new Set(CROPS.map((c) => c.familyJa));
-  for (const f of families) {
-    assert.ok(known.has(f), `マスタに無い科名が描かれている: ${f}`);
-  }
-  // 括弧付きの科がフル表記で出ること（短縮を入れるなら仕様として決め直す）。
-  const negi = CROPS.find((c) => c.id === "negi");
-  if (negi && [...html.matchAll(/aria-label="([^"]*)"/g)].some((m) => m[1].startsWith("ネギ"))) {
-    assert.ok(
-      families.includes(negi.familyJa),
-      `科名が切り詰められている: ${negi.familyJa} が無い`,
+test("チップの可視ラベルは、その候補自身の科名をそのまま出す", () => {
+  // この層は tsc / lint / lib のテストのどれからも見えない。可視ラベルの
+  // 切り詰め・差し替えをここで捕まえる。
+  // ⚠️ 「マスタのどれかの科名である」では弱い。括弧を剥がした結果も、別の実在
+  //    科名に差し替えた結果もその条件を満たしてしまう。**その候補自身の科名と
+  //    一致するか**で見る。
+  // 10月はタマネギが出るので、括弧付きの科名が VISIBLE_LIMIT に切られず描かれる。
+  const html = render([], { currentMonth: 10 });
+  const byName = new Map(CROPS.map((c) => [c.nameJa, c.familyJa]));
+
+  const chips = [
+    ...html.matchAll(
+      /<span class="plantnow-chip-name">([^<]*)<\/span><span class="plantnow-chip-family">([^<]*)<\/span>/g,
+    ),
+  ].map((m) => ({ name: m[1], family: m[2] }));
+  assert.ok(chips.length > 0, "チップが描かれていない");
+
+  for (const c of chips) {
+    assert.equal(
+      c.family,
+      byName.get(c.name),
+      `${c.name} の科名が候補自身のものと違う（表示: ${c.family}）`,
     );
   }
+
+  // 針の生存確認。括弧付きの科名が1件も描かれない月だと、剥がす退行を見られない。
+  assert.ok(
+    chips.some((c) => c.family.includes("（")),
+    "括弧付きの科名が1件も描かれていない（この検査は括弧剥がしを見られない）",
+  );
 });
 
 test("作物マスタに無い作付けは、理由を画面に出す", () => {
   const html = render([{ cropId: "not-a-crop", year: 2026 }]);
   assert.match(
     textOf(html, "verdict is-unknown"),
-    /2026年の作付けの作物が一覧にないため、この区画は判定できません。下の「作付けの記録」でその行を削除し、作物をえらび直して追加してください。/,
+    /2026年の作付けの作物が一覧にないため、この区画は判定できません。下の「作付けの記録」でその行を削除し、作物を選び直して追加してください。/,
+  );
+});
+
+/** 区画グリッドを描画して HTML を返す。 */
+function renderGrid(plantings) {
+  const garden = {
+    rows: 1,
+    cols: 1,
+    beds: [
+      {
+        id: "b1",
+        label: "畝1",
+        kind: "row",
+        col: 0,
+        row: 0,
+        plantings: plantings.map((p, i) => ({ id: `p${i}`, ...p })),
+      },
+    ],
+  };
+  return renderToStaticMarkup(
+    h(mod.BedGrid.BedGrid, {
+      garden,
+      selectedBedId: null,
+      onSelectBed: noop,
+      onAddBedAt: noop,
+    }),
+  );
+}
+
+test("グリッドと編集パネルは、同じ区画に同じ状態名を出す", () => {
+  // 片方だけを unknown にすると、スクロールせずに両方見える位置で、同じ区画に
+  // ついて「未設定」と「判定できません」が同時に出る。これは今回の変更が
+  // 潰している欠陥（同じパネルの2面が食い違う）と同型。
+  for (const plantings of [
+    [],
+    [{ cropId: "tomato", year: 2026 }],
+    [{ cropId: "not-a-crop", year: 2026 }],
+  ]) {
+    const grid = renderGrid(plantings);
+    const panel = render(plantings);
+    const label = (html) => {
+      const m = html.match(/<span class="bed-state [^"]*"><svg[\s\S]*?<\/svg><span>([^<]*)<\/span>/);
+      return m ? m[1] : null;
+    };
+    assert.equal(
+      label(grid),
+      label(panel),
+      `状態名が食い違っている (${JSON.stringify(plantings)}): グリッド=${label(grid)} / パネル=${label(panel)}`,
+    );
+  }
+  // 針の生存確認。判定不能の区画で実際に「判定できません」が出ていること。
+  assert.match(
+    renderGrid([{ cropId: "not-a-crop", year: 2026 }]),
+    /判定できません/,
   );
 });
 

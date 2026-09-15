@@ -77,6 +77,8 @@ const FACES = {
  * @param {number} ctx.currentYear 暦の今年（過ぎた年かどうかの判定にだけ使う）
  * @param {"bed" | "chip" | "preview"} ctx.face どの面に出すか
  * @param {number} [ctx.sameFamilyCount] 区画の同じ科の作付け件数（bed 面でのみ使う）
+ * @param {string} [ctx.familyJa] 判定に使った作物の科名（bed 面でのみ使う）
+ * @param {number|null} [ctx.undecidableYear] 作物が一覧に無くて科が分からない記録の年
  * @returns {string}
  */
 export function rotationSentence(facts, ctx) {
@@ -95,13 +97,27 @@ export function rotationSentence(facts, ctx) {
   //   （実測: 全称否定「ほかにありません」と、同じ記録を名指しするチップの同居が
   //    11,800パネル。基準点を名乗らない「間隔は◯年」の衝突が232パネル。）
   if (ctx.face === "bed" && ctx.sameFamilyCount === 1) {
-    return `この区画に記録した同じ科の作付けは、この${ctx.judgedYear}年の${ctx.cropName}1件だけです。この作付けは連作になっていません。`;
+    // 科を先に名乗る。「同じ科」と書くと先行詞が同じ文の後ろに来るうえ、
+    // 別の科の記録がある区画では「作付けは1件だけ」が記録一覧と食い違って読める。
+    // 連作でないことは1文に畳む（バッジ・アイコン・緑地で既に符号化されている）。
+    return `${ctx.familyJa ?? "同じ科"}の記録はこの${ctx.judgedYear}年の${ctx.cropName}だけなので、連作にはなっていません。`;
   }
 
   const near = facts.nearestSameFamilyYear;
   if (near === null || facts.gapYears === null || facts.conflictSide === null) {
-    // bed 面はここに来ない（同科は必ず判定対象自身を含む）。来たら実装の誤り。
-    return face.empty ?? "";
+    if (face.empty === null) {
+      // bed 面はここに来ない（同科は必ず判定対象自身を含む）。無言で空文字を
+      // 返すと本文の無いバナーが描かれるので、気づける形で落とす。
+      throw new Error(
+        `rotationSentence: ${ctx.face} 面で同じ科の記録が無い状態に到達した`,
+      );
+    }
+    // 科の分からない記録がある区画で「記録はありません」と断定すると、
+    // 直前に判定不能と宣言した事柄を事実として言い切ることになる。
+    if (ctx.undecidableYear != null) {
+      return `この区画の${ctx.undecidableYear}年の記録は、作物が一覧にないため科が分かりません。この判定には入れていません。`;
+    }
+    return face.empty;
   }
 
   const gap = facts.gapYears;
@@ -155,14 +171,19 @@ export function rotationSentence(facts, ctx) {
  *                                        「判定年を後ろへずらす」と「置ける年まで
  *                                        待つ」の行き先が同じなので、レバー3の文が
  *                                        そのまま到達点を名指ししている
- *   3. 置ける年まで待つ               … side !== "after" かつ 今年 < next <= MAX_YEAR
+ *   3. 置ける年まで待つ               … side !== "after" かつ 今年 < next <= MAX_YEAR。
+ *                                        ただし **チップ面の after ではレバー1に併記する**
+ *                                        （補助ラベルが「早くて◯年」と出ているので、
+ *                                          文が「ずらせ」しか言わないと目と読み上げで
+ *                                          別の助言になる）
  *   0. どれも立たない                 … 助言を出さず、次に答えが出る場所へ送る
  *
  * ⚠️ 「判定年が過ぎているか」はレバー1・2の可否にしか使わない。**レバー3（年の
  * 名指し）のゲートには使わない**。過去の記録を入れた区画でも、待てば植えられる年は
  * 実行できる助言であり、抑制すると「このうねでいつまた植えられるのか」に答えなくなる。
  * 逆にレバー3を side !== "after" でゲートしないと、未来の計画とぶつかっているだけの
- * 区画に「何年も待て」と言う欠陥が戻る。
+ * 区画に「何年も待て」と言う欠陥が戻る（チップ面での併記は、レバー1を先頭に置いた
+ * うえでの補足なのでこれに当たらない）。
  *
  * @param {VerdictFacts} facts
  * @param {{judgedYear: number, currentYear: number, face: "bed" | "chip" | "preview"}} ctx
@@ -276,7 +297,7 @@ export function rotationChipNote(facts) {
 export function unknownCropText(year) {
   // 「登録し直す」操作はその場に無い（記録の行にあるのは削除だけ）。実際に要る
   // 2手をそのまま言う。
-  return `${year}年の作付けの作物が一覧にないため、この区画は判定できません。下の「作付けの記録」でその行を削除し、作物をえらび直して追加してください。`;
+  return `${year}年の作付けの作物が一覧にないため、この区画は判定できません。下の「作付けの記録」でその行を削除し、作物を選び直して追加してください。`;
 }
 
 /**
@@ -303,6 +324,8 @@ export function unknownCropText(year) {
  * @param {any[]} input.crops 作物マスタ
  * @returns {{
  *   banner: {status: RotationStatus, text: string, latestCropId: string, latestYear: number} | null,
+ *   badgeStatus: RotationStatus | "empty" | "unknown",
+ *   undecidableYear: number | null,
  *   unknownCropText: string | null,
  *   groups: PanelGroups,
  *   totalChips: number,
@@ -314,6 +337,8 @@ export function panelVerdicts(input) {
     input;
 
   const bed = bedStatus(plantings, cropLookup);
+  // 科が分からない記録の年。文面と、チップ群の但し書きの両方が要る。
+  const undecidableYear = bed.unknownCrop ? (bed.latestYear ?? null) : null;
 
   // --- 区画バナー: 判定年は「最新作付けの年」。ここ以外から採らない。
   let banner = null;
@@ -331,6 +356,9 @@ export function panelVerdicts(input) {
           currentYear,
           face: "bed",
           sameFamilyCount: bed.sameFamilyCount,
+          familyJa: bed.latestCropId
+            ? cropLookup(bed.latestCropId)?.familyJa
+            : undefined,
         },
       ),
       latestCropId: bed.latestCropId ?? "",
@@ -351,6 +379,7 @@ export function panelVerdicts(input) {
         judgedYear: s.targetYear,
         currentYear,
         face: "chip",
+        undecidableYear,
       }),
       note: rotationChipNote(s),
     }));
@@ -381,12 +410,17 @@ export function panelVerdicts(input) {
         judgedYear,
         currentYear,
         face: "preview",
+        undecidableYear,
       }),
     };
   }
 
   return {
     banner,
+    // バッジの状態値もここで決める。コンポーネント側で「文が null かどうか」から
+    // 導くと、文面層の変更でバッジだけ静かに別の状態へ戻る。
+    badgeStatus: bed.unknownCrop ? "unknown" : bed.status,
+    undecidableYear,
     unknownCropText: bed.unknownCrop
       ? unknownCropText(bed.latestYear ?? currentYear)
       : null,

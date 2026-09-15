@@ -250,6 +250,10 @@ select:focus {
 .bed-state.is-empty {
   color: var(--text-dim);
 }
+/* 判定できない（作物が一覧に無い）。未設定と同じ中性色だが、アイコンの形が違う。 */
+.bed-state.is-unknown {
+  color: var(--text-dim);
+}
 
 /* ===== 編集パネル ===== */
 .bed-editor {
@@ -300,7 +304,9 @@ select:focus {
    沈み面で「情報が足りない」ことを示す。形と文言は他の状態と同じ枠に乗せる。 */
 .verdict.is-unknown {
   background: var(--surface-sunken);
-  border-color: var(--border-strong);
+  /* 地とカードの差は 1.02:1 しかないので、境界は枠が持つ。--border-strong では
+     カードに対して 1.38:1 で面が立たない。 */
+  border-color: var(--text-dim);
   color: var(--text);
 }
 .verdict svg {

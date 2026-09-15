@@ -1,6 +1,6 @@
 // 連作ステートの表示部品。色＋アイコン形状＋テキストの三重符号化で色覚に依存しない。
 import type { RotationStatus } from "../lib/types";
-import { IconStop, IconWarn, IconCheck, IconDashed } from "./icons";
+import { IconStop, IconWarn, IconCheck, IconDashed, IconUnknown } from "./icons";
 
 type AnyStatus = RotationStatus | "empty" | "unknown";
 
@@ -17,7 +17,7 @@ const META: Record<AnyStatus, Meta> = {
   empty: { label: "未設定", cls: "is-empty", Icon: IconDashed },
   // 作付けはあるが、作物が一覧に無くて判定できない状態。「未設定」と名乗ると
   // 「記録が1件ある」ことと矛盾するので別の状態として持つ。
-  unknown: { label: "判定できません", cls: "is-unknown", Icon: IconDashed },
+  unknown: { label: "判定できません", cls: "is-unknown", Icon: IconUnknown },
 };
 
 /** 区画セルに出す小さなステートバッジ。 */

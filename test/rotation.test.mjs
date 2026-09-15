@@ -246,10 +246,27 @@ const lookup = (id) => {
   /** @type {Record<string, {familyKey:string, rotationYears:number}>} */
   // nameJa は文の主語になる。欠けると「、の目安4年」と主語の無い文になるので、
   // 実マスタと同じく必ず持たせる（この欠落は実際にこの検査で見つかった）。
+  // nameJa / familyJa はどちらも文の主語になる。欠けるとフォールバック文言に
+  // なって実データと違う文を検査することになるので、実マスタと同じ形で持たせる。
   const db = {
-    tomato: { nameJa: "トマト", familyKey: "solanaceae", rotationYears: 4 },
-    eggplant: { nameJa: "ナス", familyKey: "solanaceae", rotationYears: 4 },
-    corn: { nameJa: "トウモロコシ", familyKey: "poaceae", rotationYears: 0 },
+    tomato: {
+      nameJa: "トマト",
+      familyJa: "ナス科",
+      familyKey: "solanaceae",
+      rotationYears: 4,
+    },
+    eggplant: {
+      nameJa: "ナス",
+      familyJa: "ナス科",
+      familyKey: "solanaceae",
+      rotationYears: 4,
+    },
+    corn: {
+      nameJa: "トウモロコシ",
+      familyJa: "イネ科",
+      familyKey: "poaceae",
+      rotationYears: 0,
+    },
   };
   return db[id];
 };
@@ -349,7 +366,7 @@ test("bedStatus: 作付け1件だけの区画で『記録はありません』�
   // 数える候補チップと真っ向から食い違う。判定対象そのものを名指しする。
   assert.equal(
     text,
-    "この区画に記録した同じ科の作付けは、この2026年のトマト1件だけです。この作付けは連作になっていません。",
+    "ナス科の記録はこの2026年のトマトだけなので、連作にはなっていません。",
   );
   assert.doesNotMatch(text, /2026年までに|ほかにありません/);
 });

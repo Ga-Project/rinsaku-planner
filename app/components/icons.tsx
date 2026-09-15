@@ -67,6 +67,21 @@ export function IconDashed(props: IconProps) {
   );
 }
 
+/**
+ * 判定できない（作物が一覧に無い）。実線の円に「?」。
+ * 破線の円（IconDashed）は「まだ何も植えていない」専用に残す。両方を同じ形にすると、
+ * 記録が1件あるのに未設定と同じ見た目になり、形での区別が失われる。
+ */
+export function IconUnknown(props: IconProps) {
+  return (
+    <Base {...props}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M9.5 9.5a2.5 2.5 0 1 1 3.2 2.4c-.7.2-1.2.9-1.2 1.6v.5" />
+      <line x1="11.5" y1="17" x2="11.5" y2="17" />
+    </Base>
+  );
+}
+
 /** 追加（プラス）。 */
 export function IconPlus(props: IconProps) {
   return (
