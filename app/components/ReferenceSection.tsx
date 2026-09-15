@@ -8,6 +8,7 @@ import Link from "next/link";
 import {
   familyReference,
   rotationYearsLabel,
+  representativeValueNote,
   FAQ,
 } from "../lib/reference.mjs";
 import { cropSlugs } from "../lib/cropPages.mjs";
@@ -46,7 +47,7 @@ export function ReferenceSection() {
               科（ファミリー）別 連作あけ年数 早見表
             </SectionHeading>
             <p className="ref-lead">
-              連作障害は野菜の名前ではなく「科」の単位で考えます。同じ科をもう一度その場所に植えるまで、どのくらいあけるとよいかの目安です。地域・品種・土壌の状態によって前後します。
+              連作障害は野菜の名前ではなく「科」の単位で考えます。同じ科をもう一度その場所に植えるまで、どのくらいあけるとよいかの代表値です。判定は野菜ごとの目安で行うため、同じ科でも野菜によって前後します。地域・品種・土壌の状態によっても変わります。
             </p>
           </div>
 
@@ -61,12 +62,12 @@ export function ReferenceSection() {
           >
             <table className="ref-table">
               <caption className="visually-hidden">
-                科ごとの、同じ場所に再び植えるまであける目安年数と、その科の主な野菜
+                科ごとの、同じ場所に再び植えるまであける目安年数の代表値と、その科の主な野菜
               </caption>
               <thead>
                 <tr>
                   <th scope="col">科</th>
-                  <th scope="col">あける年数の目安</th>
+                  <th scope="col">科の目安（代表値）</th>
                   <th scope="col">この科の主な野菜</th>
                 </tr>
               </thead>
@@ -85,10 +86,16 @@ export function ReferenceSection() {
                         {f.nameJa}
                       </span>
                     </th>
-                    <td data-label="あける年数の目安">
+                    <td data-label="科の目安（代表値）">
                       <span className={`ref-years is-${f.tier}`}>
                         {rotationYearsLabel(f.rotationYears)}
                       </span>
+                      {/* 所属する野菜で年数が割れている科にだけ添える。数値は
+                          出さない（幅を書くと、0年を「続けて植えやすい」と
+                          状態で見せている扱いと同じページ内で食い違う）。 */}
+                      {f.yearsVary && (
+                        <span className="ref-years-vary muted">野菜により前後</span>
+                      )}
                     </td>
                     <td className="ref-crops" data-label="この科の主な野菜">
                       {f.crops.join("・")}
@@ -101,7 +108,7 @@ export function ReferenceSection() {
           </div>
 
           <p className="ref-note">
-            年数を覚える必要はありません。畑めぐりに区画と作付けを記録しておくと、同じ科が近すぎる区画を色と印で知らせます。
+            {representativeValueNote()}年数を覚える必要はありません。畑めぐりに区画と作付けを記録しておくと、同じ科が近すぎる区画を色と印で知らせます。
           </p>
 
           {/* 野菜の名前から入りたい読み手の出口。科の表だけだと「トマトは何年？」に

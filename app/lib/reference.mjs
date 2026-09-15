@@ -55,18 +55,29 @@ export function rotationYearsLabel(years) {
 }
 
 /**
- * 科ごとの「あける年数 + 代表的な野菜」を、あける年数の降順で返す。
- * 年数が同じときはマスタ（FAMILIES）の並び順を保つ＝安定ソート。
- * @returns {{ key: string, nameJa: string, rotationYears: number, tier: string, hue: number, crops: string[], cropCount: number }[]}
+ * 科ごとの「あける年数の代表値 + 代表的な野菜」を、年数の降順で返す。
+ *
+ * rotationYears は **科の代表値** であって、判定に使う値ではない。判定は作物ごとの
+ * 年数を使い、59作物中20作物は科の代表値と値が違う（ジャガイモ3年 / ナス科4年 など）。
+ * yearsVary はその食い違いが起きる科を示し、早見表が代表値を断定しないようにする。
+ * 数値は手で書き写さずマスタから導出するので、マスタを直せば表示も追従する。
+ *
+ * @returns {{ key: string, nameJa: string, rotationYears: number, tier: string, hue: number, crops: string[], cropCount: number, yearsVary: boolean }[]}
  */
 export function familyReference() {
   return FAMILIES.map((f, i) => {
     const members = CROPS.filter((c) => c.familyKey === f.key);
+    const years = members.map((c) => c.rotationYears);
     return {
       key: f.key,
       nameJa: f.nameJa,
       rotationYears: f.rotationYears,
       tier: rotationTier(f.rotationYears),
+      // 所属作物の年数が割れている（または全員が代表値と違う）科。
+      yearsVary:
+        years.length > 0 &&
+        (Math.min(...years) !== Math.max(...years) ||
+          Math.min(...years) !== f.rotationYears),
       // フォールバックを置かない: 科を足して色相を忘れたらテストで落とす（黙って既定色にしない）。
       hue: FAMILY_HUE[f.key],
       crops: members.slice(0, SAMPLE_CROP_LIMIT).map((c) => c.nameJa),
@@ -87,6 +98,29 @@ function years(key) {
   const f = FAMILIES.find((x) => x.key === key);
   if (!f) throw new Error(`unknown family: ${key}`);
   return f.rotationYears;
+}
+
+/**
+ * 「{作物名}の目安は{n}年」。FAQ が科の代表値だけを断定しないようにするための、
+ * 作物ごとの年数を名指しする句。数値はマスタから引く（本文に直書きしない）。
+ * @param {string} cropId
+ */
+function cropYearsPhrase(cropId) {
+  const c = CROPS.find((x) => x.id === cropId);
+  if (!c) throw new Error(`unknown crop: ${cropId}`);
+  return `${c.nameJa}の目安は${c.rotationYears}年`;
+}
+
+/**
+ * 早見表の下に置く注。代表値と野菜ごとの値が最も食い違う例を1組だけ名指しする。
+ * 数値も名前もマスタから引く（手で書き写すと、マスタを直したとき黙って古くなる）。
+ */
+export function representativeValueNote() {
+  const potato = CROPS.find((c) => c.id === "potato");
+  if (!potato) throw new Error("unknown crop: potato");
+  const fam = FAMILIES.find((f) => f.key === potato.familyKey);
+  if (!fam) throw new Error(`unknown family: ${potato.familyKey}`);
+  return `表の年数は科の代表値です。たとえば${fam.nameJa}の代表値は${fam.rotationYears}年ですが、${potato.nameJa}の目安は${potato.rotationYears}年です。野菜ごとの年数は「野菜別に見る」で確認できます。`;
 }
 
 /**
@@ -115,11 +149,11 @@ export const FAQ = [
   },
   {
     q: "ナス科は何年あければよいですか？",
-    a: `トマト・ナス・ピーマン・ジャガイモなどのナス科は、${years("solanaceae")}年あけるのが目安とされています。青枯病や半身萎凋病といった土壌病害が残りやすく、家庭菜園で最も連作に注意したいグループです。`,
+    a: `トマト・ナス・ピーマン・ジャガイモなどのナス科は、${years("solanaceae")}年あけるのが目安とされています。青枯病や半身萎凋病といった土壌病害が残りやすく、家庭菜園で最も連作に注意したいグループです。ただしこの年数は科の代表値です。同じナス科でも${cropYearsPhrase("potato")}で、畑めぐりの判定は野菜ごとの年数を使います。`,
   },
   {
     q: "ウリ科・アブラナ科・マメ科はどのくらいあけますか？",
-    a: `キュウリ・カボチャなどのウリ科は${years("cucurbitaceae")}年、キャベツ・ダイコンなどのアブラナ科は${years("brassicaceae")}年、エダマメ・インゲンなどのマメ科は${years("fabaceae")}年が目安です。マメ科は根粒菌で土を豊かにする一方、ネコブセンチュウが増えやすいため、年数をあけない扱いにはできません。`,
+    a: `キュウリ・カボチャなどのウリ科は${years("cucurbitaceae")}年、キャベツ・ダイコンなどのアブラナ科は${years("brassicaceae")}年、エダマメ・インゲンなどのマメ科は${years("fabaceae")}年が目安です。マメ科は根粒菌で土を豊かにする一方、ネコブセンチュウが増えやすいため、年数をあけない扱いにはできません。ウリ科は野菜ごとの差が大きく、${cropYearsPhrase("watermelon")}、${cropYearsPhrase("pumpkin")}です。表の年数は科の代表値で、判定は野菜ごとの年数で行います。`,
   },
   {
     q: "連作障害が出にくい野菜はありますか？",

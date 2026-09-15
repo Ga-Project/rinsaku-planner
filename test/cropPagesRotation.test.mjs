@@ -47,7 +47,7 @@ test("同じ科の野菜を、ページが出した年数だけあけて植え�
       assert.notEqual(
         r.status,
         "ng",
-        `${p.name} → ${c.name}: ${c.rotationYears} 年あけても ${r.status}（${r.reason}）`,
+        `${p.name} → ${c.name}: ${c.rotationYears} 年あけても ${r.status}（間隔${r.gapYears}年 / 目安${r.requiredYears}年）`,
       );
       // 1年足りなければ必ず ng になる＝出している年数が過剰でもない
       if (c.rotationYears > 0) {
@@ -81,7 +81,7 @@ test("「あとに植えやすい野菜」は翌年に植えても連作にあ�
       assert.equal(
         r.status,
         "ok",
-        `${p.name} → ${f.name}: 翌年に植えて ${r.status}（${r.reason}）`,
+        `${p.name} → ${f.name}: 翌年に植えて ${r.status}（間隔${r.gapYears}年 / 目安${r.requiredYears}年）`,
       );
     }
   }

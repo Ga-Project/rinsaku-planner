@@ -81,6 +81,12 @@ export interface AppState {
 /** 連作判定の結果状態。 */
 export type RotationStatus = "ok" | "caution" | "ng";
 
+/**
+ * 判定年から見て、最も近い同じ科の作付けがどちら側にあるか。
+ * 文面の締め（助言）は「これから動かせる年があるか」で決まり、その判断に要る。
+ */
+export type ConflictSide = "same" | "before" | "after" | null;
+
 /** evaluateRotation の戻り値。 */
 export interface RotationResult {
   status: RotationStatus;
@@ -98,7 +104,8 @@ export interface RotationResult {
   nextPlantableYear: number | null;
   requiredYears: number;
   familyKey: string;
-  reason: string;
+  /** 最も近い同科の年が判定年と同じ/前/後のどれか（無ければ null）。 */
+  conflictSide: ConflictSide;
 }
 
 /** 区画単位の判定（作付けが無ければ status="empty"）。 */
@@ -107,6 +114,8 @@ export interface BedRotation extends Omit<RotationResult, "status"> {
   /** 判定の基準になった最新作付けの作物 id（無ければ null）。 */
   latestCropId: string | null;
   latestYear: number | null;
+  /** 最新作付けの作物が作物マスタに無い（判定できない）。 */
+  unknownCrop: boolean;
 }
 
 /** 種まき適期が「今月」か「翌月から」か。 */
@@ -130,6 +139,10 @@ export interface Suggestion {
    * 年数ではなく年。`targetYear + n` を計算しないこと。
    */
   nextPlantableYear: number | null;
-  /** 判定の日本語説明。 */
-  reason: string;
+  /** 判定年とその年の間隔（絶対値）。文面が目安年数と突き合わせるのに要る。 */
+  gapYears: number | null;
+  /** その候補の作物のあけたい年数（科の代表値ではない）。 */
+  requiredYears: number;
+  /** 最も近い同科の年が判定年と同じ/前/後のどれか（無ければ null）。 */
+  conflictSide: ConflictSide;
 }

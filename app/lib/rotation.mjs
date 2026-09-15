@@ -22,7 +22,15 @@
  * @property {number | null} nextPlantableYear どの作付けからも目安の年数があく最初の年（status が ng のときだけ数値）
  * @property {number} requiredYears その科の推奨間隔（年・0 以上）
  * @property {string} familyKey 判定対象の科
- * @property {string} reason 利用者向けの日本語説明
+ * @property {ConflictSide} conflictSide 最も近い同科の年が判定年と同じ/前/後のどれか（無ければ null）
+ */
+
+/**
+ * @typedef {"same" | "before" | "after" | null} ConflictSide
+ *   判定年から見て、最も近い同じ科の作付けがどちら側にあるか。
+ *   文面の締め（助言）は「これから動かせる年があるか」で決まり、その判断に要る。
+ *   呼び出し側で年を引き算して求めさせると、同年重複（gapYears === 0）を
+ *   各画面が各自で気づく作りになり、必ずどこかが取りこぼす。
  */
 
 /**
@@ -75,7 +83,7 @@ function findNextPlantableYear(years, req, fromYear) {
  *   という、製品が自分の勧めを自分で否定する状態になる。
  *
  * ルール:
- *   - requiredYears <= 0 の科は連作障害が出にくい ⇒ 常に ok（近い作付けがあれば reason で補足）。
+ *   - requiredYears <= 0 の科は連作障害が出にくい ⇒ 常に ok。
  *   - 同科の作付けのうち targetYear に最も近いものを取り、gap = |targetYear - その年| とすると:
  *       gap < requiredYears  → ng（避けるべき窓の内側）
  *       gap === requiredYears → caution（目安ちょうど・もう1年で安心）
@@ -128,7 +136,7 @@ export function evaluateRotation(records, familyKey, requiredYears, targetYear) 
       nextPlantableYear: null,
       requiredYears: req,
       familyKey,
-      reason: "同じ科の作付けの記録はありません。",
+      conflictSide: null,
     };
   }
 
@@ -139,6 +147,9 @@ export function evaluateRotation(records, familyKey, requiredYears, targetYear) 
     nextPlantableYear: /** @type {number | null} */ (null),
     requiredYears: req,
     familyKey,
+    conflictSide: /** @type {ConflictSide} */ (
+      year === targetYear ? "same" : year < targetYear ? "before" : "after"
+    ),
   };
 
   // 「あと何年あければよいか」は、その年が **他の同じ科の作付けで塞がっていない**
@@ -152,7 +163,6 @@ export function evaluateRotation(records, familyKey, requiredYears, targetYear) 
       ...base,
       requiredYears: 0,
       status: "ok",
-      reason: "連作障害が出にくい科です。続けて植えても比較的安心です。",
     };
   }
 
@@ -162,11 +172,6 @@ export function evaluateRotation(records, familyKey, requiredYears, targetYear) 
       ...base,
       status: "ng",
       nextPlantableYear: next,
-      // 名指しするのは、いちばん近い作付けの年と、置ける年の2つだけ。
-      // 年を列挙しないのは、記録件数に対して文が伸びるのを避けるため
-      // （検算に要る全件は、同じパネルの「作付けの記録」に並んでいる）。
-      // 「どの作付けからも」が、その一覧を見るよう促す語。
-      reason: `${year}年に同じ科の作付けがあります。どの作付けからも目安の${req}年あくのは、早くて${next}年です。`,
     };
   }
 
@@ -174,16 +179,12 @@ export function evaluateRotation(records, familyKey, requiredYears, targetYear) 
     return {
       ...base,
       status: "caution",
-      // 助言は入れない。衝突相手が判定年より後にあるとき「もう1年あける」は
-      // 間隔を縮めるので必ず避けたい年に落ちる。役割はバッジと群見出しが持つ。
-      reason: `${year}年に同じ科の作付けがあります。間隔は目安の${req}年ちょうどです。`,
     };
   }
 
   return {
     ...base,
     status: "ok",
-    reason: `${year}年に同じ科の作付けがあります。間隔は${gap}年です（目安${req}年）。`,
   };
 }
 
@@ -203,9 +204,10 @@ export function evaluateRotation(records, familyKey, requiredYears, targetYear) 
  * @property {number | null} nextPlantableYear
  * @property {number} requiredYears
  * @property {string} familyKey
- * @property {string} reason
+ * @property {ConflictSide} conflictSide
  * @property {string | null} latestCropId 判定基準の最新作付けの作物 id
  * @property {number | null} latestYear 判定基準の最新作付けの年
+ * @property {boolean} unknownCrop 最新作付けの作物が作物マスタに無い（判定できない）
  */
 
 /**
@@ -231,9 +233,10 @@ export function bedStatus(plantings, cropLookup) {
       nextPlantableYear: null,
       requiredYears: 0,
       familyKey: "",
-      reason: "まだ何も植えられていません。",
+      conflictSide: null,
       latestCropId: null,
       latestYear: null,
+      unknownCrop: false,
     };
   }
 
@@ -252,9 +255,13 @@ export function bedStatus(plantings, cropLookup) {
       nextPlantableYear: null,
       requiredYears: 0,
       familyKey: "",
-      reason: "作物の情報が見つかりませんでした。",
+      conflictSide: null,
       latestCropId: latest.cropId,
       latestYear: latest.year,
+      // 作物マスタに無い id（古い保存データの取り込み等）。status は "empty" のまま
+      // にして区画グリッドのバッジと worstStatus の意味を変えないが、
+      // 判定できなかったことは画面に出す（黙って判定欄が消えるのを防ぐ）。
+      unknownCrop: true,
     };
   }
 
@@ -297,18 +304,9 @@ export function bedStatus(plantings, cropLookup) {
   return {
     ...result,
     nextPlantableYear,
-    // 素の文（同じ科の作付けの記録はありません）をそのまま出すと、
-    // 「すでに記録した作付けの判定 ── 2027年 トマト」という見出しの直下で
-    // 「記録はありません」と言うことになるので、ここだけ言い換える。
-    // ng の文は、上で数え直した年に差し替える。
-    reason:
-      result.nearestSameFamilyYear === null
-        ? "前後の年に、同じ科の作付けはほかにありません。"
-        : nextPlantableYear !== null
-          ? `${result.nearestSameFamilyYear}年に同じ科の作付けがあります。どの作付けからも目安の${result.requiredYears}年あくのは、早くて${nextPlantableYear}年です。`
-          : result.reason,
     latestCropId: latest.cropId,
     latestYear: latest.year,
+    unknownCrop: false,
   };
 }
 

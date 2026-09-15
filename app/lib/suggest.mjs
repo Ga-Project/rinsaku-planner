@@ -130,7 +130,12 @@ export function suggestPlantings(plantings, crops, month, year) {
         // （ここで 目安 - 間隔 を再計算すると、その年が別の同じ科の作付けで
         // 塞がっている場合に、置けない年を指す）。
         nextPlantableYear: result.nextPlantableYear,
-        reason: result.reason,
+        gapYears: result.gapYears,
+        // 科の代表値ではなく、その候補の作物自身のあけたい年数。
+        // 文面はこれを作物名とセットでしか出さない（同じパネルに違う数字が
+        // 並んでも、主語が別なら矛盾ではなく情報になる）。
+        requiredYears: result.requiredYears,
+        conflictSide: result.conflictSide,
       },
     });
   });

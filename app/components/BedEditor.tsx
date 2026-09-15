@@ -5,6 +5,12 @@ import type { Bed, BedKind, Suggestion } from "../lib/types";
 import { bedStatus, evaluateRotation } from "../lib/rotation.mjs";
 import { cropById, cropsGroupedByFamily } from "../lib/crops.mjs";
 import { summarizeMonths } from "../lib/schedule.mjs";
+import {
+  bedVerdictText,
+  previewVerdictText,
+  suggestionText,
+  UNKNOWN_CROP_TEXT,
+} from "../lib/verdictCopy.mjs";
 import { Verdict, StateBadge } from "./status-ui";
 import { PlantNow } from "./PlantNow";
 import { IconPlus, IconTrash } from "./icons";
@@ -50,11 +56,23 @@ export function BedEditor({
         return c ? { familyKey: c.familyKey, year: p.year } : null;
       })
       .filter((x): x is { familyKey: string; year: number } => x !== null);
+    const result = evaluateRotation(
+      past,
+      crop.familyKey,
+      crop.rotationYears,
+      eff,
+    );
     return {
       crop,
-      result: evaluateRotation(past, crop.familyKey, crop.rotationYears, eff),
+      result,
+      // 判定年（eff）は入力欄の年なので過去も未来も来る。
+      text: previewVerdictText(result, crop, eff, currentYear),
     };
   }, [cropId, year, bed.plantings, currentYear]);
+
+  // 文の組み立て（どの作物名・どの年を渡すか）は lib 側に置いてある。
+  // ここで組み立てると、引数の取り違えを JSX を描画しないと検査できなくなる。
+  const bannerText = bedVerdictText(status, cropById, currentYear);
 
   function handleAdd() {
     if (!cropId) return;
@@ -93,6 +111,14 @@ export function BedEditor({
         </select>
       </div>
 
+      {/* 作物マスタに無い id（古い保存データ等）。判定欄が黙って消えると
+          「なぜ何も出ないのか」が利用者に分からないので、理由だけ出す。 */}
+      {status.unknownCrop && (
+        <p className="muted" role="status">
+          {UNKNOWN_CROP_TEXT}
+        </p>
+      )}
+
       {status.status !== "empty" && (
         <>
           {/* このバナーは「すでに記録した作付け」を、それ以前の記録に照らして判定したもの。
@@ -104,7 +130,7 @@ export function BedEditor({
               {cropById(status.latestCropId)?.nameJa ?? status.latestCropId}
             </p>
           )}
-          <Verdict status={status.status} reason={status.reason} />
+          <Verdict status={status.status} text={bannerText ?? ""} />
         </>
       )}
 
@@ -120,7 +146,10 @@ export function BedEditor({
           // 候補はその年に植える前提で連作を判定しているので、年も候補側に合わせる
           // （12月に「1月からの作付け」を選ぶと翌年になる）。入力中の年は上書きされる。
           setYear(s.targetYear);
-          setPickNotice(`${s.nameJa}を選びました。${s.reason}`);
+          // チップ本体と同じ文を読み上げる（片方だけ直すと食い違う）。
+          setPickNotice(
+            `${s.nameJa}を選びました。` + suggestionText(s, currentYear),
+          );
           // 選んだ結果が入るフォームまで視線を運ぶ（下にあって見えないことがある）。
           cropSelectRef.current?.focus();
         }}
@@ -206,10 +235,7 @@ export function BedEditor({
             {summarizeMonths(preview.crop.sowMonths)}／収穫{" "}
             {summarizeMonths(preview.crop.harvestMonths)}
           </p>
-          <Verdict
-            status={preview.result.status}
-            reason={preview.result.reason}
-          />
+          <Verdict status={preview.result.status} text={preview.text} />
         </div>
       )}
 

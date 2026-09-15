@@ -29,13 +29,17 @@ export function StateBadge({ status }: { status: AnyStatus }) {
   );
 }
 
-/** 編集パネルに出す、判定理由つきのバナー。 */
+/**
+ * 編集パネルに出す、判定つきのバナー。
+ * 文は verdictCopy の合成関数が組み立てたものを受け取るだけで、ここでは作らない
+ * （同じパネルに上下で並ぶ他の面と文がずれるのを防ぐ）。
+ */
 export function Verdict({
   status,
-  reason,
+  text,
 }: {
   status: AnyStatus;
-  reason: string;
+  text: string;
 }) {
   if (status === "empty") return null;
   const m = META[status];
@@ -43,7 +47,7 @@ export function Verdict({
   return (
     <p className={`verdict ${m.cls}`} role="status">
       <Icon />
-      <span>{reason}</span>
+      <span>{text}</span>
     </p>
   );
 }

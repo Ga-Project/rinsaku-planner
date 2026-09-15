@@ -82,7 +82,12 @@ test("同じ科の直近作付けがあけ年数に足りなければ ng にな�
   const byId = Object.fromEntries(out.map((s) => [s.cropId, s]));
 
   assert.equal(byId["aki-nasu"].status, "ng");
-  assert.match(byId["aki-nasu"].reason, /早くて2028年です/);
+  assert.equal(byId["aki-nasu"].nextPlantableYear, 2028);
+  assert.equal(byId["aki-nasu"].conflictSide, "before");
+  // 候補は科の代表値ではなく、その作物自身のあけたい年数を持ち回る
+  // （文面が作物名とセットで名乗るのに要る）。
+  assert.equal(byId["aki-nasu"].requiredYears, 4);
+  assert.equal(byId["aki-nasu"].gapYears, 2);
   // 別の科は影響を受けない
   assert.equal(byId["hakusai"].status, "ok");
 });

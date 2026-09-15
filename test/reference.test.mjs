@@ -11,6 +11,7 @@ import {
   familyReference,
   rotationTier,
   rotationYearsLabel,
+  representativeValueNote,
   FAQ,
   faqJsonLd,
   appJsonLd,
@@ -129,7 +130,12 @@ test("FAQ が『あけずに続けやすい』と言う科は、早見表でも�
 
 test("FAQ 本文に現れる年数はすべてマスタに実在する値", () => {
   // 「ナス科は5年」のような直書きの混入を面で捕まえる。
-  const valid = new Set(FAMILIES.map((f) => f.rotationYears));
+  // FAQ は科の代表値だけでなく作物ごとの年数も名指しする（代表値を断定しない
+  // ための但し書き）ので、両方をマスタ由来の正当な値として許す。
+  const valid = new Set([
+    ...FAMILIES.map((f) => f.rotationYears),
+    ...CROPS.map((c) => c.rotationYears),
+  ]);
   for (const item of FAQ) {
     for (const m of item.a.matchAll(/(\d+)年/g)) {
       const n = Number(m[1]);
@@ -202,4 +208,37 @@ test("OG画像のソースにマスタの具体値を焼き込んでいない", 
       `OG画像に科名が焼き込まれている: ${f.nameJa}`,
     );
   }
+});
+
+test("早見表の『野菜により前後』は、所属作物の年数からマスタ由来で決まる", () => {
+  // 早見表が出すのは科の代表値で、判定に使うのは作物ごとの年数。
+  // 両者が食い違う科に注記が付かないと、検算した利用者に矛盾として見える。
+  const fams = familyReference();
+  assert.ok(fams.length > 0);
+  for (const f of fams) {
+    const years = CROPS.filter((c) => c.familyKey === f.key).map(
+      (c) => c.rotationYears,
+    );
+    const expected =
+      Math.min(...years) !== Math.max(...years) ||
+      Math.min(...years) !== f.rotationYears;
+    assert.equal(
+      f.yearsVary,
+      expected,
+      `${f.nameJa}: 代表値${f.rotationYears} / 所属作物 ${years.join(",")}`,
+    );
+  }
+  // 実マスタでは9科が該当する。ゼロや全科になったら導出が壊れている。
+  const vary = fams.filter((f) => f.yearsVary).length;
+  assert.ok(vary > 0 && vary < fams.length, `該当科が偏っている: ${vary}`);
+});
+
+test("早見表の注は、代表値と食い違う実例をマスタから引く", () => {
+  const note = representativeValueNote();
+  const potato = CROPS.find((c) => c.id === "potato");
+  const fam = FAMILIES.find((f) => f.key === potato.familyKey);
+  assert.match(note, new RegExp(`${fam.nameJa}の代表値は${fam.rotationYears}年`));
+  assert.match(note, new RegExp(`${potato.nameJa}の目安は${potato.rotationYears}年`));
+  // 代表値と作物の値が同じでは例にならない（マスタが変わったら気づけるように）。
+  assert.notEqual(potato.rotationYears, fam.rotationYears);
 });

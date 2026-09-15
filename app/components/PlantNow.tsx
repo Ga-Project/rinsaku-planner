@@ -9,10 +9,22 @@ import {
 } from "../lib/suggest.mjs";
 import { CROPS } from "../lib/crops.mjs";
 import { MONTH_LABELS } from "../lib/schedule.mjs";
+import { suggestionText, rotationChipNote } from "../lib/verdictCopy.mjs";
 import { IconCheck, IconWarn, IconStop, IconClock } from "./icons";
 
 /** 作付け最盛期は候補が48件出る月がある。既定で見せる件数を抑え、残りは開いて見せる。 */
 const VISIBLE_LIMIT = 8;
+
+/**
+ * チップに出す科名。括弧書き（「ヒガンバナ科（ネギ類）」）を落として全角6以内に収める。
+ * 11全角は 320px で確実に2行になり、チップが7行に膨らむ事故の主因だった。
+ * チップは識別ラベルで、科の正式名は早見表と読み上げ名が担保する。
+ * @param familyJa 科の正式名
+ */
+function shortFamily(familyJa: string): string {
+  const i = familyJa.indexOf("（");
+  return i > 0 ? familyJa.slice(0, i) : familyJa;
+}
 
 /**
  * 候補のひとまとまり。見出しの語・アイコン形状・色の三重で状態を示し、
@@ -27,6 +39,7 @@ function Group({
   Icon,
   items,
   selectedCropId,
+  currentYear,
   onPick,
 }: {
   title: string;
@@ -37,6 +50,8 @@ function Group({
   Icon: (props: { className?: string }) => JSX.Element;
   items: Suggestion[];
   selectedCropId: string;
+  /** 暦の今年。過ぎた年かどうかの判定に要る（文の締めが分岐する）。 */
+  currentYear: number;
   onPick: (s: Suggestion) => void;
 }) {
   const headId = useId();
@@ -54,7 +69,11 @@ function Group({
         <span className="muted plantnow-group-note">{note}</span>
       </p>
       <ul className="plantnow-chips">
-        {shown.map((s) => (
+        {shown.map((s) => {
+          // 文はチップごとに書き起こさず、バナー・プレビューと同じ合成関数を通す。
+          const sentence = suggestionText(s, currentYear);
+          const chipNote = rotationChipNote(s);
+          return (
           <li key={s.cropId}>
             <button
               type="button"
@@ -62,29 +81,25 @@ function Group({
               aria-pressed={s.cropId === selectedCropId}
               // 見た目（色・形）で伝えている状態を、読み上げにも同じだけ乗せる。
               // 理由は title 属性だとタッチでもキーボードでも開けないので名前に含める。
-              aria-label={`${s.nameJa}（${s.familyJa}）— ${state}。${s.reason}`}
+              // 科名は短縮せずフルで読ませる（見た目だけを 320px に合わせている）。
+              aria-label={`${s.nameJa}（${s.familyJa}）— ${state}。${sentence}`}
               onClick={() => onPick(s)}
             >
               <span className="plantnow-chip-name">{s.nameJa}</span>
-              <span className="plantnow-chip-family">{s.familyJa}</span>
-              {/* 年数ではなく年を出す。「あと5年」は起点が画面に無いので
-                  検算できず、同じ文の「目安3年」と並ぶと引き算の誤りに見える。
-                  年なら基準点が要らず、候補が横並びのときどれが先に空くかも
-                  そのまま読める。「◯年から」ではなく「早くて◯年」なのは、
-                  さらに先の年に同じ科の記録があると、その年以降ずっと置ける
-                  とは限らないため。避けたい候補のときだけ出す（間隔に注意・
-                  植えられる のときは判定年そのものに植えられるので誤読になる）。 */}
-              {s.status === "ng" && s.nextPlantableYear !== null && (
-                <span className="plantnow-chip-note">
-                  早くて{s.nextPlantableYear}年
-                </span>
-              )}
-              {s.status === "caution" && (
-                <span className="plantnow-chip-note">目安ちょうど</span>
+              <span className="plantnow-chip-family">
+                {shortFamily(s.familyJa)}
+              </span>
+              {/* 補助ラベルの出し分けは verdictCopy が持つ。年数ではなく年を出すのは
+                  「あと5年」の起点が画面に無く検算できないため。衝突相手が判定年より
+                  後のときに「早くて◯年」を出さないのは、その年が未来の計画より後ろに
+                  なり、候補同士を「どれが先に空くか」で見比べる用途に対して嘘になるため。 */}
+              {chipNote !== null && (
+                <span className="plantnow-chip-note">{chipNote}</span>
               )}
             </button>
           </li>
-        ))}
+          );
+        })}
       </ul>
       {hidden > 0 && (
         <button
@@ -166,6 +181,7 @@ export function PlantNow({
             Icon={IconCheck}
             items={groups.now}
             selectedCropId={selectedCropId}
+            currentYear={year}
             onPick={onPick}
           />
           <Group
@@ -176,6 +192,7 @@ export function PlantNow({
             Icon={IconWarn}
             items={groups.caution}
             selectedCropId={selectedCropId}
+            currentYear={year}
             onPick={onPick}
           />
           <Group
@@ -186,6 +203,7 @@ export function PlantNow({
             Icon={IconStop}
             items={groups.avoid}
             selectedCropId={selectedCropId}
+            currentYear={year}
             onPick={onPick}
           />
           <Group
@@ -204,6 +222,7 @@ export function PlantNow({
             Icon={IconClock}
             items={groups.soon}
             selectedCropId={selectedCropId}
+            currentYear={year}
             onPick={onPick}
           />
         </>

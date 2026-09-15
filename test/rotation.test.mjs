@@ -1,6 +1,7 @@
 // 連作判定ロジックのテスト（node:test 標準ランナー）。
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { bedVerdictText } from "../app/lib/verdictCopy.mjs";
 import {
   evaluateRotation,
   bedStatus,
@@ -20,7 +21,8 @@ test("evaluateRotation: 間隔不足は ng（gap < 必要年数）", () => {
   assert.equal(r.status, "ng");
   assert.equal(r.nearestSameFamilyYear, 2024);
   assert.equal(r.gapYears, 2);
-  assert.match(r.reason, /早くて2028年です/);
+  assert.equal(r.conflictSide, "before");
+  assert.equal(r.nextPlantableYear, 2028);
 });
 
 test("evaluateRotation: 目安ちょうどは caution（gap === 必要年数）", () => {
@@ -103,7 +105,7 @@ test("evaluateRotation: 判定年より後の作付け（予定）も間隔と�
   assert.equal(near.status, "ng", "2年しかあかない予定を見逃している");
   assert.equal(near.nearestSameFamilyYear, 2028);
   assert.equal(near.gapYears, 2);
-  assert.match(near.reason, /2028年/);
+  assert.equal(near.conflictSide, "after", "判定年より後という関係を保っていない");
 
   // 目安ちょうど・十分あいている側も同じ規則で判定する。
   assert.equal(
@@ -121,7 +123,7 @@ test("evaluateRotation: 判定年より後の作付け（予定）も間隔と�
 // 「ずらすのがおすすめ」と言うと、済んだことに対する実行不能な助言になる。
 // 判定エンジンは暦の今日を持たない（Date に依存しない）ので、文言は時制を
 // 断定しない言い方に揃える。
-test("evaluateRotation: 説明文が時制を断定しない（過ぎた年を『予定』と呼ばない）", () => {
+test("evaluateRotation: エンジンは文を返さない（暦を持たないので助言できない）", () => {
   // 2023年に植えようとしていて、2024年に同じ科の記録がある（どちらも過去）。
   const r = evaluateRotation(
     [{ familyKey: "solanaceae", year: 2024 }],
@@ -130,13 +132,15 @@ test("evaluateRotation: 説明文が時制を断定しない（過ぎた年を�
     2023,
   );
   assert.equal(r.nearestSameFamilyYear, 2024, "判定年より後という関係自体は保つ");
-  assert.doesNotMatch(r.reason, /予定|ずらす|植えています|経過して/);
-  assert.match(r.reason, /2024年/);
+  assert.equal(r.conflictSide, "after");
 
-  // caution / ok 側も同じ。
+  // エンジンは暦の今日も作物名も持たないので、文そのものを返してはいけない。
+  // 文を返すと「過ぎた年か」を判断できないまま助言することになり、
+  // 去年の記録を入れただけの利用者に実行できない年を出す欠陥が再発する。
   for (const [req, target] of [
     [1, 2023],
     [4, 2020],
+    [3, 2023],
   ]) {
     const x = evaluateRotation(
       [{ familyKey: "solanaceae", year: 2024 }],
@@ -144,11 +148,21 @@ test("evaluateRotation: 説明文が時制を断定しない（過ぎた年を�
       req,
       target,
     );
-    assert.doesNotMatch(
-      x.reason,
-      /予定|ずらす|植えています|経過して/,
-      `req=${req} で時制を断定している`,
+    assert.equal(
+      Object.hasOwn(x, "reason"),
+      false,
+      `req=${req} でエンジンが文を返している`,
     );
+    // 科キー等の識別子は文字列でよい。禁じたいのは「文」なので、
+    // 句点を含む文字列が1つも無いことで判定する。
+    for (const [k, v] of Object.entries(x)) {
+      if (typeof v !== "string") continue;
+      assert.doesNotMatch(
+        v,
+        /。/,
+        `req=${req} でエンジンが文を返している (${k}: ${v})`,
+      );
+    }
   }
 });
 
@@ -167,7 +181,6 @@ test("evaluateRotation: あと◯年が、別の同じ科で塞がった年を�
   // 指した年が実際に避けなくてよい年であることを、判定を呼び直して確かめる。
   const at = evaluateRotation(past, "solanaceae", 4, r.nextPlantableYear);
   assert.notEqual(at.status, "ng", `${r.nextPlantableYear}年も避けたい年だった`);
-  assert.match(r.reason, new RegExp(`早くて${r.nextPlantableYear}年です`));
   // ひとつ手前の年はまだ避けたい年（最小の年を指している）。
   assert.equal(
     evaluateRotation(past, "solanaceae", 4, r.nextPlantableYear - 1).status,
@@ -184,10 +197,7 @@ test("evaluateRotation: 単純なケースの『あと◯年』は従来どお�
     2026,
   );
   assert.equal(r.nextPlantableYear, 2028);
-  assert.equal(
-    r.reason,
-    "2024年に同じ科の作付けがあります。どの作付けからも目安の4年あくのは、早くて2028年です。",
-  );
+  assert.equal(r.conflictSide, "before");
 });
 
 test("evaluateRotation: 避けなくてよい判定では あと◯年 を持たない", () => {
@@ -221,10 +231,7 @@ test("evaluateRotation: 同年の作付けは間隔0の衝突として扱う（�
   assert.equal(r.nearestSameFamilyYear, 2026);
   assert.equal(r.status, "ng");
   assert.equal(r.nextPlantableYear, 2030);
-  assert.equal(
-    r.reason,
-    "2026年に同じ科の作付けがあります。どの作付けからも目安の4年あくのは、早くて2030年です。",
-  );
+  assert.equal(r.conflictSide, "same", "同年の重複を same として区別していない");
 });
 
 test("evaluateRotation: 負の必要年数は 0 とみなす", () => {
@@ -237,10 +244,12 @@ test("evaluateRotation: 負の必要年数は 0 とみなす", () => {
 
 const lookup = (id) => {
   /** @type {Record<string, {familyKey:string, rotationYears:number}>} */
+  // nameJa は文の主語になる。欠けると「、の目安4年」と主語の無い文になるので、
+  // 実マスタと同じく必ず持たせる（この欠落は実際にこの検査で見つかった）。
   const db = {
-    tomato: { familyKey: "solanaceae", rotationYears: 4 },
-    eggplant: { familyKey: "solanaceae", rotationYears: 4 },
-    corn: { familyKey: "poaceae", rotationYears: 0 },
+    tomato: { nameJa: "トマト", familyKey: "solanaceae", rotationYears: 4 },
+    eggplant: { nameJa: "ナス", familyKey: "solanaceae", rotationYears: 4 },
+    corn: { nameJa: "トウモロコシ", familyKey: "poaceae", rotationYears: 0 },
   };
   return db[id];
 };
@@ -305,72 +314,97 @@ test("worstStatus: 最も深刻なステータスを返す", () => {
 
 // --- bedStatus の説明文（利用者に見える契約） ---------------------------------
 //
-// bedStatus の reason は編集パネルの Verdict にそのまま出る。status だけを検査して
-// いると、文言だけが壊れた退行を1件も捕まえられない（実際に一度、共有プリミティブ
-// の文言に「判定年」を焼き込んだせいで、bedStatus 経路だけが
-// 「2026年 トマト」と表示した直下で「2026年までに記録はありません」と言う状態が
-// 全テスト緑のまま通った）。分岐ごとに文言を固定する。
+// 文はエンジンではなく verdictCopy が組み立てるが、区画バナーに出るのは
+// 「bedStatus の事実 → 合成関数」を通った結果なので、その組み合わせで固定する。
+// status だけを検査していると、文言だけが壊れた退行を1件も捕まえられない
+// （実際に一度、共有プリミティブの文言に「判定年」を焼き込んだせいで、bedStatus
+// 経路だけが「2026年 トマト」と表示した直下で「2026年までに記録はありません」と
+// 言う状態が全テスト緑のまま通った）。
+
+/** 区画バナーに実際に出る文（画面が呼ぶのと同じ関数を通す）。 */
+function bedText(plantings, _cropName, currentYear) {
+  return bedVerdictText(bedStatus(plantings, lookup), lookup, currentYear);
+}
 
 test("bedStatus: 作付け1件だけの区画で『記録はありません』と矛盾しない", () => {
   const r = bedStatus([{ cropId: "tomato", year: 2026 }], lookup);
   // 画面はこの直前に「すでに記録した作付けの判定 ── 2026年 トマト」と出す。
   assert.equal(r.latestYear, 2026);
   assert.equal(r.status, "ok");
-  // 見出し「すでに記録した作付けの判定 ── 2026年 トマト」の直下に出る文なので、
-  // 「記録はありません」と裸で言わない（判定対象の作付け自身は履歴から外している）。
-  assert.equal(r.reason, "前後の年に、同じ科の作付けはほかにありません。");
-  assert.doesNotMatch(r.reason, /2026年までに/);
+  // 見出しの直下に出る文なので、「記録はありません」と裸で言わない
+  // （判定対象の作付け自身は履歴から外している）。
+  const text = bedText([{ cropId: "tomato", year: 2026 }], "トマト", 2026);
+  assert.equal(text, "前後の年に、同じ科の作付けはほかにありません。");
+  assert.doesNotMatch(text, /2026年までに/);
 });
 
 test("bedStatus: 各分岐の説明文を固定する", () => {
-  // ng（過去の同科が近すぎる）
-  const ng = bedStatus(
-    [
-      { cropId: "tomato", year: 2024 },
-      { cropId: "tomato", year: 2026 },
-    ],
-    lookup,
-  );
-  assert.equal(ng.status, "ng");
+  // ng（過去の同科が近すぎる）。判定年が今年なので、置ける年を名指しできる。
   assert.equal(
-    ng.reason,
-    "2024年に同じ科の作付けがあります。どの作付けからも目安の4年あくのは、早くて2030年です。",
+    bedText(
+      [
+        { cropId: "tomato", year: 2024 },
+        { cropId: "tomato", year: 2026 },
+      ],
+      "トマト",
+      2026,
+    ),
+    "2024年に同じ科の作付けがあります。間隔は2年で、トマトの目安4年に足りません。どの作付けからも4年あくのは、早くて2030年です。",
   );
 
-  // caution（目安ちょうど）
-  const caution = bedStatus(
-    [
-      { cropId: "tomato", year: 2022 },
-      { cropId: "tomato", year: 2026 },
-    ],
-    lookup,
-  );
-  assert.equal(caution.status, "caution");
+  // ng だが判定年が過ぎている。実行できない「早くて◯年」を出さない。
   assert.equal(
-    caution.reason,
-    "2022年に同じ科の作付けがあります。間隔は目安の4年ちょうどです。",
+    bedText(
+      [
+        { cropId: "tomato", year: 2024 },
+        { cropId: "tomato", year: 2026 },
+      ],
+      "トマト",
+      2030,
+    ),
+    "2024年に同じ科の作付けがあります。間隔は2年で、トマトの目安4年に足りません。過ぎた年の記録なので、これから植えるものは下の「いま植えるなら」で確かめてください。",
+  );
+
+  // caution（目安ちょうど）。助言は付けない。
+  assert.equal(
+    bedText(
+      [
+        { cropId: "tomato", year: 2022 },
+        { cropId: "tomato", year: 2026 },
+      ],
+      "トマト",
+      2026,
+    ),
+    "2022年に同じ科の作付けがあります。間隔は4年で、トマトの目安ちょうどです。",
   );
 
   // ok（十分あいている）
-  const ok = bedStatus(
-    [
-      { cropId: "tomato", year: 2019 },
-      { cropId: "tomato", year: 2026 },
-    ],
-    lookup,
-  );
-  assert.equal(ok.status, "ok");
   assert.equal(
-    ok.reason,
-    "2019年に同じ科の作付けがあります。間隔は7年です（目安4年）。",
+    bedText(
+      [
+        { cropId: "tomato", year: 2019 },
+        { cropId: "tomato", year: 2026 },
+      ],
+      "トマト",
+      2026,
+    ),
+    "2019年に同じ科の作付けがあります。間隔は7年あり、トマトの目安4年をこえています。",
   );
+});
 
-  // 作付けなし / 未知の作物
-  assert.equal(bedStatus([], lookup).reason, "まだ何も植えられていません。");
-  assert.equal(
-    bedStatus([{ cropId: "unknown", year: 2026 }], lookup).reason,
-    "作物の情報が見つかりませんでした。",
-  );
+test("bedStatus: 作付けなし / 作物マスタに無い id を事実で区別する", () => {
+  const empty = bedStatus([], lookup);
+  assert.equal(empty.status, "empty");
+  assert.equal(empty.unknownCrop, false);
+  assert.equal(empty.latestCropId, null);
+
+  // 判定できないことを画面に出すための旗。status は "empty" のままにして
+  // 区画グリッドのバッジと worstStatus の意味を変えない。
+  const unknown = bedStatus([{ cropId: "unknown", year: 2026 }], lookup);
+  assert.equal(unknown.status, "empty");
+  assert.equal(unknown.unknownCrop, true);
+  assert.equal(unknown.latestCropId, "unknown");
+  assert.equal(unknown.latestYear, 2026);
 });
 
 test("bedStatus: 判定の基準になる作付け自身より後の記録は基準を動かさない", () => {
