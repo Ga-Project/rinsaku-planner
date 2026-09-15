@@ -16,6 +16,10 @@ import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { cropSlugs, cropUrl, cropIndexUrl } from "../app/lib/cropPages.mjs";
 import { SITE_URL } from "../app/lib/site.mjs";
+import {
+  familyReference,
+  representativeValueNote,
+} from "../app/lib/reference.mjs";
 
 const outDir = process.argv[2] ?? "out";
 const basePath = (process.argv[3] ?? process.env.BASE_PATH ?? "").replace(
@@ -86,6 +90,32 @@ if (!existsSync(notFound)) {
   const s = readFileSync(notFound, "utf8");
   if (s.includes('href="/"')) fail("404: ホームへ戻るリンクに basePath が付いていない");
   if (!/noindex/.test(s)) fail("404: noindex が付いていない");
+}
+
+// 早見表の「科の代表値であって判定の年数ではない」という但し書きは、トップの
+// 静的HTMLにしか現れない（プランナー本体はクライアント描画）。ユニットテストは
+// familyReference() の値は見るが、それが描画されるかは見ないので、注記を消しても
+// 型・lint・テストは全部緑のまま公開まで通る。ここで落とす。
+// 期待値はすべて作物マスタから導出する（HTMLに期待文字列を直書きしない）。
+{
+  const top = html(".");
+  const fams = familyReference();
+  const labels = [...new Set(fams.map((f) => f.yearsVaryLabel).filter(Boolean))];
+  if (labels.length === 0) {
+    fail("早見表: 年数が割れる科が1つも無い（導出が壊れている）");
+  }
+  for (const label of labels) {
+    if (!top.includes(label)) {
+      fail(`早見表: 割れ幅の注記「${label}」が書き出されていない`);
+    }
+  }
+  const note = representativeValueNote();
+  if (!top.includes(note)) {
+    fail("早見表: 代表値の注（野菜ごとの値との違い）が書き出されていない");
+  }
+  if (!top.includes("科の目安（代表値）")) {
+    fail("早見表: 列見出しが「代表値」と名乗っていない");
+  }
 }
 
 // sitemap は全ページを列挙し、列挙した URL の実ファイルが存在すること

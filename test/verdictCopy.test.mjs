@@ -50,13 +50,25 @@ function previewText(plantings, cropId, year, currentYear = NOW) {
 
 // --- 仕様の検算シナリオ（今年 = 2026） --------------------------------------
 
-test("①これからの計画どうしが近い: 置ける年を名指しできる", () => {
+test("①待てば実行できるなら、置ける年を名指しする", () => {
   assert.equal(
     bedText([
       { cropId: "tomato", year: 2026 },
       { cropId: "tomato", year: 2027 },
     ]),
-    "2026年に同じ科の作付けがあります。間隔は1年で、トマトの目安4年に足りません。どの作付けからも4年あくのは、早くて2031年です。",
+    "2026年に同じ科の作付けがあります。間隔は1年で、トマトの目安4年に足りません。いまある記録のままだと、どの作付けからも4年あくのは早くて2031年です。",
+  );
+});
+
+test("①-b 判定年が過ぎていても、待てば実行できる年は名指しする", () => {
+  // 過去の記録だからと年を伏せると「このうねでいつまた植えられるのか」に
+  // 製品が答えなくなる。過ぎているかどうかは、年を名指しするかの条件ではない。
+  assert.equal(
+    bedText([
+      { cropId: "tomato", year: 2024 },
+      { cropId: "tomato", year: 2025 },
+    ]),
+    "2024年に同じ科の作付けがあります。間隔は1年で、トマトの目安4年に足りません。いまある記録のままだと、どの作付けからも4年あくのは早くて2029年です。",
   );
 });
 
@@ -77,13 +89,43 @@ test("③判定年だけが過ぎている: 動かせる1件を名指しする",
   );
 });
 
-test("④判定年も衝突年も過ぎている: 助言を出さず、動かせる場所へ送る", () => {
-  const text = previewText([{ cropId: "tomato", year: 2023 }], "tomato", 2024);
+test("④引けるレバーが1つも無い: 助言を出さず、答えが出る場所へ送る", () => {
+  // 置ける年（2022年）も過ぎているので、待つ助言が成立しない。
+  const text = previewText([{ cropId: "tomato", year: 2018 }], "tomato", 2019);
   assert.equal(
     text,
-    "2023年に同じ科の作付けがあります。間隔は1年で、トマトの目安4年に足りません。過ぎた年の記録なので、これから植えるものは上の「いま植えるなら」で確かめてください。",
+    "2018年に同じ科の作付けがあります。間隔は1年で、トマトの目安4年に足りません。どちらも過ぎた年のことなので、これから植えるものは上の「いま植えるなら」で確かめてください。",
   );
   assert.doesNotMatch(text, /早くて|ずらす/);
+});
+
+test("④-b チップ面は、動かせる記録のある場所を名指しする", () => {
+  // チップの年は暦が決めるので動かせない。動かせるのは衝突年の記録だけ。
+  const chips = allChips(panel([{ cropId: "tomato", year: 2027 }], { month: 5 }))
+    .filter((c) => c.status === "ng" && c.conflictSide === "after");
+  assert.ok(chips.length > 0, "after の ng 候補が出ていない");
+  for (const c of chips) {
+    assert.match(
+      c.text,
+      /間隔をあけるには、下の「作付けの記録」で2027年の作付けをずらすことになります。$/,
+      `チップに実行できない助言が出ている: ${c.text}`,
+    );
+    // チップには年を動かす手段が無いので、判定年をずらせとは言わない。
+    assert.doesNotMatch(c.text, /どちらかをずらす/);
+  }
+});
+
+test("⑦記録できない年は名指ししない", () => {
+  // 年の入力は 1900〜3000。置ける年が 3000 を超えるなら、その年は記録できない。
+  const text = bedText([
+    { cropId: "tomato", year: 2997 },
+    { cropId: "tomato", year: 3000 },
+  ]);
+  assert.equal(
+    text,
+    "2997年に同じ科の作付けがあります。間隔は3年で、トマトの目安4年に足りません。3000年より後で、どの作付けからも4年あく年は、記録できる3000年より先になります。",
+  );
+  assert.doesNotMatch(text, /300[1-9]|3[1-9]\d\d/, "記録できない年を名指ししている");
 });
 
 test("⑤同じパネルに違う目安が並んでも、主語が別なので矛盾に見えない", () => {
@@ -121,7 +163,9 @@ test("⑤同じパネルに違う目安が並んでも、主語が別なので�
       );
     }
   }
-  assert.equal(rotationChipNote(chipFacts), "2027年と近い");
+  // 補助ラベルの軸は「空く年」1本。ふさいでいる年を混ぜると、チップ同士を
+  // 年の数字で見比べたときに順序が反転して見える。
+  assert.equal(rotationChipNote(chipFacts), "早くて2031年");
 });
 
 test("⑥同じ年に同じ科が2件: 間隔0の重なりとして言い分ける", () => {
@@ -130,7 +174,7 @@ test("⑥同じ年に同じ科が2件: 間隔0の重なりとして言い分け�
       { cropId: "tomato", year: 2026 },
       { cropId: "eggplant", year: 2026 },
     ]),
-    "2026年には、同じ科の作付けがもう1件あります。間隔は0年で、ナスの目安4年に足りません。どの作付けからも4年あくのは、早くて2030年です。",
+    "2026年には、同じ科の作付けがもう1件あります。間隔は0年で、ナスの目安4年に足りません。いまある記録のままだと、どの作付けからも4年あくのは早くて2030年です。",
   );
 });
 
@@ -162,11 +206,11 @@ test("同じ科の記録が無いときの文だけが面で変わる", () => {
   );
 });
 
-test("過ぎた年の締めは、その面で見るべき場所を指す", () => {
-  const plantings = [{ cropId: "tomato", year: 2023 }];
-  assert.match(previewText(plantings, "tomato", 2024), /上の「いま植えるなら」/);
+test("レバーが無いときの誘導先は、その面から見た場所を指す", () => {
+  const plantings = [{ cropId: "tomato", year: 2018 }];
+  assert.match(previewText(plantings, "tomato", 2019), /上の「いま植えるなら」/);
   assert.match(
-    bedText([...plantings, { cropId: "tomato", year: 2024 }]),
+    bedText([...plantings, { cropId: "tomato", year: 2019 }]),
     /下の「いま植えるなら」/,
   );
 });
@@ -195,13 +239,14 @@ test("チップの補助ラベルは全角9以内で、相対年数を使わな�
     conflictSide: "before",
   };
   assert.equal(rotationChipNote(base), "早くて2028年");
+  // side が違っても軸は変えない（順序の反転を防ぐ）。
+  assert.equal(rotationChipNote({ ...base, conflictSide: "same" }), "早くて2028年");
+  assert.equal(rotationChipNote({ ...base, conflictSide: "after" }), "早くて2028年");
+  assert.equal(rotationChipNote({ ...base, status: "caution" }), "目安ちょうど");
+  // 記録できない年は出さない。
   assert.equal(
-    rotationChipNote({ ...base, conflictSide: "same" }),
-    "同じ年に重なる",
-  );
-  assert.equal(
-    rotationChipNote({ ...base, status: "caution" }),
-    "目安ちょうど",
+    rotationChipNote({ ...base, nextPlantableYear: 3004 }),
+    null,
   );
   assert.equal(rotationChipNote({ ...base, status: "ok" }), null);
   assert.equal(rotationChipNote({ ...base, requiredYears: 0 }), null);
@@ -213,6 +258,10 @@ test("チップの補助ラベルは全角9以内で、相対年数を使わな�
       if (note === null) continue;
       assert.ok(note.length <= 9, `補助ラベルが長い: ${note} (${note.length})`);
       assert.doesNotMatch(note, /あと\d+年/, `相対年数を使っている: ${note}`);
+      // 軸が混ざっていないこと（年を出すラベルは「早くて」だけ）。
+      if (/\d{4}年/.test(note)) {
+        assert.match(note, /^早くて\d{4}年$/, `補助ラベルの軸が混ざっている: ${note}`);
+      }
     }
   }
 });

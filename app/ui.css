@@ -1002,7 +1002,11 @@ select:focus {
   .ref-table tbody td > .ref-years {
     justify-self: start;
   }
+  /* td は 2列グリッドになるため、放っておくと注記が次の行の1列目
+     （＝ラベル列）に入り、値の無い3つ目のラベルに見える。修飾先である
+     代表値チップの真下に置く。 */
   .ref-table tbody td > .ref-years-vary {
+    grid-column: 2;
     justify-self: start;
   }
   .ref-table tbody th::before,

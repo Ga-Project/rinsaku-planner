@@ -7,8 +7,10 @@ export const CURRENT_VERSION = 1;
 /** グリッドの寸法上限（極端な値を弾く）。 */
 const MAX_GRID = 24;
 /** 年の妥当範囲。 */
-const MIN_YEAR = 1900;
-const MAX_YEAR = 3000;
+// 記録できる年の範囲。文面側も「記録できない年を名指ししない」ためにこの値を使う
+// ので、ここが唯一の出典になるよう公開する。
+export const MIN_YEAR = 1900;
+export const MAX_YEAR = 3000;
 
 /**
  * @typedef {import("./types").AppState} AppState

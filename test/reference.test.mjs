@@ -233,6 +233,42 @@ test("早見表の『野菜により前後』は、所属作物の年数から�
   assert.ok(vary > 0 && vary < fams.length, `該当科が偏っている: ${vary}`);
 });
 
+test("代表値と作物ごとの年数が食い違う実数をピン留めする", () => {
+  // この改修の前提そのもの。式の写経ではなく実マスタの実数を固定するので、
+  // マスタを直して食い違いが消えた（＝注記や但し書きが不要になった）ときに気づける。
+  const byKey = Object.fromEntries(FAMILIES.map((f) => [f.key, f]));
+  const mismatched = CROPS.filter(
+    (c) => byKey[c.familyKey] && byKey[c.familyKey].rotationYears !== c.rotationYears,
+  );
+  assert.equal(CROPS.length, 59, "作物数が変わっている");
+  assert.equal(
+    mismatched.length,
+    20,
+    `代表値と違う作物: ${mismatched.map((c) => `${c.nameJa}${c.rotationYears}年`).join("/")}`,
+  );
+});
+
+test("割れ幅の注記は、2年以上ひらく科でだけ実際の幅を出す", () => {
+  for (const f of familyReference()) {
+    const years = CROPS.filter((c) => c.familyKey === f.key).map(
+      (c) => c.rotationYears,
+    );
+    const min = Math.min(...years);
+    const max = Math.max(...years);
+    if (!f.yearsVary) {
+      assert.equal(f.yearsVaryLabel, null, `${f.nameJa}: 割れていないのに注記がある`);
+    } else if (max - min >= 2) {
+      assert.equal(
+        f.yearsVaryLabel,
+        `野菜により${min}〜${max}年`,
+        `${f.nameJa}: 幅${min}〜${max}年を「前後」で済ませている`,
+      );
+    } else {
+      assert.equal(f.yearsVaryLabel, "野菜により前後", `${f.nameJa}`);
+    }
+  }
+});
+
 test("早見表の注は、代表値と食い違う実例をマスタから引く", () => {
   const note = representativeValueNote();
   const potato = CROPS.find((c) => c.id === "potato");

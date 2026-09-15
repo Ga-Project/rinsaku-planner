@@ -90,11 +90,14 @@ export function ReferenceSection() {
                       <span className={`ref-years is-${f.tier}`}>
                         {rotationYearsLabel(f.rotationYears)}
                       </span>
-                      {/* 所属する野菜で年数が割れている科にだけ添える。数値は
-                          出さない（幅を書くと、0年を「続けて植えやすい」と
-                          状態で見せている扱いと同じページ内で食い違う）。 */}
-                      {f.yearsVary && (
-                        <span className="ref-years-vary muted">野菜により前後</span>
+                      {/* 所属する野菜で年数が割れている科にだけ添える。文言は
+                          マスタから導出する（2年以上ひらく科は実際の幅を出す。
+                          「前後」は±1を連想させ、ウリ科1〜5年のような割れを
+                          小さく見せてしまうため）。 */}
+                      {f.yearsVaryLabel !== null && (
+                        <span className="ref-years-vary muted">
+                          {f.yearsVaryLabel}
+                        </span>
                       )}
                     </td>
                     <td className="ref-crops" data-label="この科の主な野菜">
@@ -107,8 +110,9 @@ export function ReferenceSection() {
             </table>
           </div>
 
+          <p className="ref-note">{representativeValueNote()}</p>
           <p className="ref-note">
-            {representativeValueNote()}年数を覚える必要はありません。畑めぐりに区画と作付けを記録しておくと、同じ科が近すぎる区画を色と印で知らせます。
+            年数を覚える必要はありません。畑めぐりに区画と作付けを記録しておくと、同じ科が近すぎる区画を色と印で知らせます。
           </p>
 
           {/* 野菜の名前から入りたい読み手の出口。科の表だけだと「トマトは何年？」に

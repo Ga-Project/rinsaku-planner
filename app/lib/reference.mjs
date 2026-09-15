@@ -62,7 +62,7 @@ export function rotationYearsLabel(years) {
  * yearsVary はその食い違いが起きる科を示し、早見表が代表値を断定しないようにする。
  * 数値は手で書き写さずマスタから導出するので、マスタを直せば表示も追従する。
  *
- * @returns {{ key: string, nameJa: string, rotationYears: number, tier: string, hue: number, crops: string[], cropCount: number, yearsVary: boolean }[]}
+ * @returns {{ key: string, nameJa: string, rotationYears: number, tier: string, hue: number, crops: string[], cropCount: number, yearsVary: boolean, yearsVaryLabel: (string | null) }[]}
  */
 export function familyReference() {
   return FAMILIES.map((f, i) => {
@@ -78,6 +78,10 @@ export function familyReference() {
         years.length > 0 &&
         (Math.min(...years) !== Math.max(...years) ||
           Math.min(...years) !== f.rotationYears),
+      // 割れ幅の告知。「前後」は±1を連想させるので、2年以上ひらく科では実際の幅を出す。
+      // ウリ科は代表値3年に対し所属はスイカ5年〜カボチャ1年で、「前後」では
+      // 表を読んで3年あけた人をこの製品自身が「目安5年に足りません」と否定する。
+      yearsVaryLabel: yearsVaryLabel(years, f.rotationYears),
       // フォールバックを置かない: 科を足して色相を忘れたらテストで落とす（黙って既定色にしない）。
       hue: FAMILY_HUE[f.key],
       crops: members.slice(0, SAMPLE_CROP_LIMIT).map((c) => c.nameJa),
@@ -88,6 +92,23 @@ export function familyReference() {
     .filter((f) => f.cropCount > 0)
     .sort((a, b) => b.rotationYears - a.rotationYears || a._order - b._order)
     .map(({ _order, ...rest }) => rest);
+}
+
+/**
+ * 「野菜により前後」/「野菜により{min}〜{max}年」。割れていない科は null。
+ * 幅を数値で出すのは2年以上ひらくときだけ。0年は「続けて植えやすい」と状態で
+ * 見せているので、0を含む幅（0〜1年）を数値で書くと同じページ内で扱いが2通りになる
+ * が、0を含む科の幅は実データ上すべて1年なので「前後」側に入る。
+ * @param {number[]} years 所属作物のあけたい年数
+ * @param {number} representative 科の代表値
+ * @returns {string | null}
+ */
+function yearsVaryLabel(years, representative) {
+  if (years.length === 0) return null;
+  const min = Math.min(...years);
+  const max = Math.max(...years);
+  if (min === max && min === representative) return null;
+  return max - min >= 2 ? `野菜により${min}〜${max}年` : "野菜により前後";
 }
 
 /**

@@ -16,6 +16,7 @@
 //   「どこを見てほしいか（hereLabel）」の2つだけを引数で渡す形に閉じてある。
 
 import { bedStatus, evaluateRotation } from "./rotation.mjs";
+import { MAX_YEAR } from "./storage.mjs";
 import { suggestPlantings, groupSuggestions } from "./suggest.mjs";
 
 /**
@@ -45,7 +46,8 @@ const FACES = {
     empty: "前後の年に、同じ科の作付けはほかにありません。",
     here: "下の「いま植えるなら」",
   },
-  // 候補チップ。判定年は必ず今年か翌年なので、過ぎた年の分岐は起きない。
+  // 候補チップ。判定年は必ず今年か翌年なので、過ぎた年の分岐は起きない
+  //（＝ng では here に到達しない。here は将来 ok/caution 側で使う余地のみ）。
   chip: {
     empty: "この区画に、同じ科の作付けの記録はありません。",
     here: "「いま植えるなら」",
@@ -113,56 +115,97 @@ export function rotationSentence(facts, ctx) {
   //      「もう1年あける」が必ず逆向きになる（間隔が縮んで ng に落ちる）。
   if (facts.status !== "ng") return slot1 + slot2;
 
-  const past = ctx.judgedYear < ctx.currentYear;
-
-  if (side === "after") {
-    // 衝突相手が判定年より後。この作付けを先送りしても相手に近づくだけなので
-    // 「早くて◯年」は出さない（出すと実行意図と食い違う＝欠陥2の実測ケース）。
-    if (!past) {
-      return (
-        slot1 +
-        slot2 +
-        `間隔をあけるには、${ctx.judgedYear}年か${near}年のどちらかをずらすことになります。`
-      );
-    }
-    if (near >= ctx.currentYear) {
-      return (
-        slot1 +
-        slot2 +
-        `${ctx.judgedYear}年はもう過ぎているので、間隔をあけるなら${near}年の作付けをずらすことになります。`
-      );
-    }
-    // 判定年も衝突年も過去。動かせる年が無い。
-    return slot1 + slot2 + pastAdvice(face.here);
-  }
-
-  // side が before / same。判定年を先送りできるなら、置ける年を名指しできる。
-  if (!past && facts.nextPlantableYear !== null) {
-    return (
-      slot1 +
-      slot2 +
-      `どの作付けからも${req}年あくのは、早くて${facts.nextPlantableYear}年です。`
-    );
-  }
-  return slot1 + slot2 + pastAdvice(face.here);
+  return slot1 + slot2 + closing(facts, ctx, near, req, face.here);
 }
 
 /**
- * 動かせる年が無いときの締め。助言の代わりに、次に動かせる場所へ送る。
+ * ng のときの締め。**この画面から利用者がいま引けるレバーのうち、最も安いもの1つ**
+ * だけを名指しする。レバーは上から順に:
+ *
+ *   1. 衝突相手（未来の計画）をずらす … side === "after"。待つより安い
+ *   2. 判定年をずらす                 … その面で判定年が編集できる（bed / preview）
+ *   3. 置ける年まで待つ               … side !== "after" かつ 今年 < next <= MAX_YEAR
+ *   0. どれも立たない                 … 助言を出さず、次に答えが出る場所へ送る
+ *
+ * ⚠️ 「判定年が過ぎているか」はレバー1・2の可否にしか使わない。**レバー3（年の
+ * 名指し）のゲートには使わない**。過去の記録を入れた区画でも、待てば植えられる年は
+ * 実行できる助言であり、抑制すると「このうねでいつまた植えられるのか」に答えなくなる。
+ * 逆にレバー3を side !== "after" でゲートしないと、未来の計画とぶつかっているだけの
+ * 区画に「何年も待て」と言う欠陥が戻る。
+ *
+ * @param {VerdictFacts} facts
+ * @param {{judgedYear: number, currentYear: number, face: "bed" | "chip" | "preview"}} ctx
+ * @param {number} near 最も近い同科の年
+ * @param {number} req あけたい年数
+ * @param {string} here 答えが出る場所（面ごと）
+ * @returns {string}
+ */
+function closing(facts, ctx, near, req, here) {
+  const judged = ctx.judgedYear;
+  const past = judged < ctx.currentYear;
+
+  if (facts.conflictSide === "after") {
+    // 名指しした2つの年が両方とも過去。動かせるものがない。
+    if (past && near < ctx.currentYear) return noLeverAdvice(here);
+    // 判定年は動かせないが、衝突年は未来の計画なので動かせる。
+    if (past) {
+      return `${judged}年はもう過ぎているので、間隔をあけるなら${near}年の作付けをずらすことになります。`;
+    }
+    // チップの年は暦が決める＝動かせない。かつ判定年の作付けはまだ存在しない。
+    // 動かせるのは衝突年の記録だけなので、手の届く場所を名指しする。
+    if (ctx.face === "chip") {
+      return `間隔をあけるには、下の「作付けの記録」で${near}年の作付けをずらすことになります。`;
+    }
+    // 判定年も衝突年も編集できる。両端どちらを動かしてもよい。
+    return `間隔をあけるには、${judged}年か${near}年のどちらかをずらすことになります。`;
+  }
+
+  // side が before / same。待てば実行できるかどうかだけで決まる。
+  const next = facts.nextPlantableYear;
+  if (next === null) return noLeverAdvice(here);
+  if (next > MAX_YEAR) {
+    // 記録できない年は名指ししない。「{判定年}年より後で」を必ず付ける
+    // （付けないと、判定年より前の年で成立しうるので嘘になる）。
+    return `${judged}年より後で、どの作付けからも${req}年あく年は、記録できる${MAX_YEAR}年より先になります。`;
+  }
+  if (next > ctx.currentYear) {
+    // 「いまある記録のままだと」を前置するのは、next が未来の計画も含めて
+    // 算出されるため。衝突相手が過去でも、別の未来の計画が next を押し出している
+    // ことがあり、この一句だけが名指しした年を全ての配置で真にする。
+    // 「{next}年からです」とは書かない。next の後ろが塞がっている配置が実在する。
+    return `いまある記録のままだと、どの作付けからも${req}年あくのは早くて${next}年です。`;
+  }
+  return noLeverAdvice(here);
+}
+
+/**
+ * いま引けるレバーが1つも無いときの締め。助言の代わりに、次に答えが出る場所へ送る。
+ *
+ * 「そこに一覧があります」型の言い方はしない。誘導先の「いま植えるなら」は適期の
+ * 作物が無い月には候補0件になるため、一覧の存在を約束すると嘘になる。場所の指示に
+ * 留めれば、答えが「いまは無い」でも文は成立する。
+ * （PlantNow は候補0件でも見出しと不在メッセージを必ず描く。そこを「0件なら非表示」に
+ *   変えるとこの文が宙に浮くので、変えるならこの文も同時に変える。）
+ *
  * @param {string} here
  */
-function pastAdvice(here) {
-  return `過ぎた年の記録なので、これから植えるものは${here}で確かめてください。`;
+function noLeverAdvice(here) {
+  return `どちらも過ぎた年のことなので、これから植えるものは${here}で確かめてください。`;
 }
 
 /**
  * 候補チップに出す短い補助ラベル（無ければ null）。
  *
+ * ■ 軸を1本に揃える
+ *   利用者はチップに並んだ年の数字だけを見比べる。ここに「空く年」と「ふさいでいる年」を
+ *   混ぜると順序が反転して見える。実測では、2025年トマト＋2027年キュウリを記録した区画で
+ *   スイカに「2027年と近い」、トマトに「早くて2029年」が並び、**実際は2032年まで置けない
+ *   スイカが、2029年のトマトより早く空くように見えた**。相対年数をやめて年にした目的が
+ *   「検算できる比較」なので、比較の軸は `nextPlantableYear` の1本に固定する。
+ *   なぜふさがっているかは、読み上げ名に載る説明文が担う。
+ *
  * 320px でチップが7行に膨らんだ事故があるため全角9以内に収める。
  * 相対年数（「あと5年」）は起点が画面に無く検算できないので使わない。
- * 衝突相手が判定年より後のときに「早くて◯年」を出さないのは、その年が
- * 未来の計画より後ろの年になり、チップ同士を「どれが先に空くか」で
- * 見比べる用途に対して嘘になるため。比較の軸を相手の年に切り替える。
  *
  * @param {VerdictFacts} facts
  * @returns {string | null}
@@ -171,14 +214,23 @@ export function rotationChipNote(facts) {
   if (facts.requiredYears <= 0) return null;
   if (facts.status === "caution") return "目安ちょうど";
   if (facts.status !== "ng") return null;
-  if (facts.conflictSide === "same") return "同じ年に重なる";
-  if (facts.conflictSide === "after" && facts.nearestSameFamilyYear !== null) {
-    return `${facts.nearestSameFamilyYear}年と近い`;
-  }
-  if (facts.nextPlantableYear !== null) {
+  // 記録できない年は補助ラベルでも名指ししない（締めの文と同じ規則）。
+  if (facts.nextPlantableYear !== null && facts.nextPlantableYear <= MAX_YEAR) {
     return `早くて${facts.nextPlantableYear}年`;
   }
   return null;
+}
+
+/**
+ * 最新作付けの作物が作物マスタに無いときの、区画バナーの文。
+ *
+ * 判定欄が黙って消えると「なぜ何も出ないのか」が分からないので、原因の作付けを
+ * 年で名指しし、直せる場所まで案内する。
+ *
+ * @param {number} year 判定できなかった作付けの年
+ */
+export function unknownCropText(year) {
+  return `${year}年の作付けの作物が一覧にないため、この区画は判定できません。下の「作付けの記録」で登録し直してください。`;
 }
 
 /**
@@ -288,7 +340,9 @@ export function panelVerdicts(input) {
 
   return {
     banner,
-    unknownCropText: bed.unknownCrop ? UNKNOWN_CROP_TEXT : null,
+    unknownCropText: bed.unknownCrop
+      ? unknownCropText(bed.latestYear ?? currentYear)
+      : null,
     groups: {
       now: decorate(grouped.now),
       caution: decorate(grouped.caution),
@@ -299,7 +353,3 @@ export function panelVerdicts(input) {
     preview,
   };
 }
-
-/** 最新作付けの作物が作物マスタに無いときの、区画バナーの文。 */
-export const UNKNOWN_CROP_TEXT =
-  "この作付けの作物が見つからないため、判定できません。";

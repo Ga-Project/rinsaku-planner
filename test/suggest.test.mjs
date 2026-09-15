@@ -8,6 +8,9 @@ import { suggestPlantings, groupSuggestions } from "../app/lib/suggest.mjs";
 import { CROPS, cropById } from "../app/lib/crops.mjs";
 
 /** テスト用の小さな作物マスタ（本物のマスタに依存しない境界検査用）。 */
+// ⚠️ この FIXTURE は「作物ごとの年数」を検査の軸に持つ。同じ科に、科の代表値と
+// 違う年数の作物を必ず1件入れておくこと（jagaimo）。全作物が代表値と一致した
+// 縮退した集合にすると、判定が科の代表値へ退行しても検出できなくなる。
 const FIXTURE = [
   {
     id: "aki-nasu",
@@ -57,6 +60,19 @@ const FIXTURE = [
     companionBad: [],
     note: "",
   },
+  {
+    id: "jagaimo",
+    nameJa: "ジャガイモ",
+    familyJa: "ナス科",
+    familyKey: "solanaceae",
+    // ナス科の代表値は4年。この作物だけ3年で、判定はこちらを使う。
+    rotationYears: 3,
+    sowMonths: [8],
+    harvestMonths: [11],
+    companionGood: [],
+    companionBad: [],
+    note: "",
+  },
 ];
 
 test("今月が適期の作物だけを now、翌月からの作物を soon で返す", () => {
@@ -90,6 +106,23 @@ test("同じ科の直近作付けがあけ年数に足りなければ ng にな�
   assert.equal(byId["aki-nasu"].gapYears, 2);
   // 別の科は影響を受けない
   assert.equal(byId["hakusai"].status, "ok");
+
+  // 同じナス科でも、判定に使うのは科の代表値(4年)ではなく作物自身の年数(3年)。
+  // 2024年→2026年は間隔2年なので、3年のジャガイモも ng だが要求年数が違う。
+  assert.equal(byId["jagaimo"].requiredYears, 3);
+  assert.equal(byId["aki-nasu"].requiredYears, 4);
+});
+
+test("同じ科でも、あけたい年数は作物ごとに採る（科の代表値に退行しない）", () => {
+  // 2023年にナス科を植えた区画を2026年に見る＝間隔3年。
+  // ジャガイモ(3年)は目安ちょうどで caution、秋ナス(4年)は足りず ng。
+  const byId = Object.fromEntries(
+    suggestPlantings([{ cropId: "aki-nasu", year: 2023 }], FIXTURE, 8, 2026).map(
+      (s) => [s.cropId, s],
+    ),
+  );
+  assert.equal(byId["jagaimo"].status, "caution");
+  assert.equal(byId["aki-nasu"].status, "ng");
 });
 
 test("あけ年数ちょうどは caution（目安到達だがもう1年あけたい）", () => {
@@ -179,18 +212,19 @@ test("並びは now→soon、同じ時期なら ok→caution→ng", () => {
     [
       ["now", "caution"],
       ["now", "ng"],
+      ["now", "ng"],
       ["soon", "ok"],
     ],
   );
 });
 
 test("timing も status も同じ候補は、作物マスタの登録順に並ぶ", () => {
-  // FIXTURE の 8月 now・履歴なし → aki-nasu, hakusai がいずれも ok。
-  // マスタの並び（aki-nasu が先）がそのまま出力順になる。
+  // FIXTURE の 8月 now・履歴なし → aki-nasu, hakusai, jagaimo がいずれも ok。
+  // マスタの並びがそのまま出力順になる。
   const asc = suggestPlantings([], FIXTURE, 8, 2026);
   assert.deepEqual(
     asc.filter((s) => s.timing === "now").map((s) => s.cropId),
-    ["aki-nasu", "hakusai"],
+    ["aki-nasu", "hakusai", "jagaimo"],
   );
 
   // マスタの順を入れ替えれば出力順も入れ替わる（登録順が効いていることの確認）。
@@ -199,7 +233,7 @@ test("timing も status も同じ候補は、作物マスタの登録順に並�
     suggestPlantings([], swapped, 8, 2026)
       .filter((s) => s.timing === "now")
       .map((s) => s.cropId),
-    ["hakusai", "aki-nasu"],
+    ["hakusai", "aki-nasu", "jagaimo"],
   );
 });
 
@@ -230,7 +264,7 @@ test("不正な入力でも例外にならない", () => {
     suggestPlantings([], dirty, 8, 2026)
       .filter((s) => s.timing === "now")
       .map((s) => s.cropId),
-    ["aki-nasu", "hakusai"],
+    ["aki-nasu", "hakusai", "jagaimo"],
   );
 });
 
@@ -258,7 +292,8 @@ test("groupSuggestions は今月ok/要注意/避けたい/翌月に振り分け�
   );
   assert.deepEqual(
     g.avoid.map((s) => s.cropId),
-    ["aki-nasu"],
+    // ジャガイモ(3年)も 2025年→2026年の間隔1年では足りない。
+    ["aki-nasu", "jagaimo"],
   );
   assert.deepEqual(
     g.soon.map((s) => s.cropId),

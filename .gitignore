@@ -21,3 +21,6 @@ next-env.d.ts
 # OS / logs
 .DS_Store
 *.log
+
+# テスト時にコンポーネントを描画するための生成物
+app/.test-build/
