@@ -887,8 +887,10 @@ test("記録できない年を打っている間は、判定を出さない", ()
   const bed = bedStatus(plantings, cropById);
   assert.equal(bed.status, "ng", "前提: 連作NGの区画になっていない");
 
+  // 非有限（Infinity / NaN）も「記録できる年ではない」側に含める。ここを外すと
+  // そこだけがガードをすり抜けて今年に差し替わり、欄の数字と判定の年が食い違う。
   let reached = 0;
-  for (const bad of [2, 20, 202, 1899, 3001, 20226, -5]) {
+  for (const bad of [2, 20, 202, 1899, 3001, 20226, -5, Infinity, -Infinity, NaN]) {
     const p = panel(plantings, { cropId: "tomato", year: bad, currentYear: 2026 });
     assert.notEqual(p.preview, null, `プレビューが無い: ${bad}`);
     reached++;
@@ -907,7 +909,7 @@ test("記録できない年を打っている間は、判定を出さない", ()
     // 記録できる範囲を名乗り、まだ判定していないと言う。
     assert.match(p.preview.text, /まだ判定できません/, String(bad));
   }
-  assert.ok(reached === 7, `検査に到達した入力が少ない: ${reached}`);
+  assert.ok(reached === 10, `検査に到達した入力が少ない: ${reached}`);
 
   // 範囲内なら従来どおり判定する（上の分岐が広すぎて判定を殺していないこと）。
   const okYear = panel(plantings, { cropId: "tomato", year: 2027, currentYear: 2026 });

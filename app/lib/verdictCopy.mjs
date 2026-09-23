@@ -485,16 +485,20 @@ export function panelVerdicts(input) {
     // からも導けない文が出る。しかも連作NGの区画で3打鍵ぶん「目安をこえています」＝
     // 安全側を断定してしまう。この製品の他の文は一貫して「言い切れないことは
     // 言い切らない」で書かれているので、ここも判定を出さないほうに倒す。
+    // 非有限（Infinity / NaN）も「記録できる年ではない」側。ここを
+    // Number.isFinite で絞ると、そこだけがガードをすり抜けて今年に差し替わり、
+    // 欄の数字と判定の年が食い違う。
     const outOfRange =
       typeof formYear === "number" &&
-      Number.isFinite(formYear) &&
-      (formYear < MIN_YEAR || formYear > MAX_YEAR);
+      (!Number.isFinite(formYear) ||
+        formYear < MIN_YEAR ||
+        formYear > MAX_YEAR);
     if (outOfRange) {
       preview = {
         crop,
         status: "unknown",
         targetYear: judgedYear,
-        text: `年が${MIN_YEAR}〜${MAX_YEAR}の範囲にないので、まだ判定できません。`,
+        text: `年が${MIN_YEAR}〜${MAX_YEAR}になっていないので、まだ判定できません。`,
       };
     } else {
       const records = plantings

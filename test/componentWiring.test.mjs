@@ -556,28 +556,55 @@ test("作付けを作れるのは storage の makePlanting だけ", () => {
   // 「作付けの id を作る手段が storage の外に無い」ことをソースで固定する。
   // id の接頭辞で見ると、別の綴り（newId("pl") 等）で素通りできる。作付けの id を
   // 作ったかではなく「作付けの形をした値をその場で組み立てたか」を見る。
-  // 「cropId と year を持つ」だけでは広すぎる（props の型宣言や panelVerdicts の
-  // 引数が引っかかる）。作付けを見分けるのは **id を一緒に持つ** こと。
-  // 対象はディレクトリ走査で決める（ファイルを足しても網から漏れない）。
-  // transpile 後ではなくソースを読む — 実際の書き込み経路 PlannerApp.tsx は
-  // 描画検査の transpile 対象に入っておらず、成果物を見ると素通りする。
+  // 「cropId と year を持つ」だけでは広すぎる（panelVerdicts の引数が当たる）。
+  // 作付けを見分けるのは **id を一緒に持つ** こと。`id` はショートハンド
+  // （`{ id, cropId, year }`）も取るので、直後は `:` に限らない。
+  //
+  // 読むのは **型を消したあと** の JS。ソースをそのまま読むと、値を1つも作らない
+  // 型注釈（`onEditPlanting?: (p: { id: string; cropId: string; year: number })`）
+  // まで違反になり、作付けを編集する機能の素直なシグネチャが書けなくなる。
+  // ここで自前に transpile するのは、実際の書き込み経路 PlannerApp.tsx が
+  // 描画検査の transpile 対象（FILES）に入っていないため。
+  // `id` は「その場で置いた持ち物」に限る。`selectedBed.id` のような参照は
+  // 作付けの組み立てではないので、直前がドットのものは外す。
   const PLANTING_LITERAL =
-    /\{(?=[^{}]*\bid\s*:)(?=[^{}]*\bcropId\b)(?=[^{}]*\byear\b)[^{}]*\}/;
-  const files = readdirSync("app/components")
-    .filter((f) => f.endsWith(".tsx"))
-    .map((f) => join("app/components", f));
+    /\{(?=[^{}]*(?<![.\w])id\s*[:,}])(?=[^{}]*\bcropId\b)(?=[^{}]*\byear\b)[^{}]*\}/;
+  const files = readdirSync("app/components").filter((f) => f.endsWith(".tsx"));
   assert.ok(files.length > 3, `走査したコンポーネントが少なすぎる: ${files.length}`);
+  const stripTypes = (src) =>
+    ts.transpileModule(src, {
+      compilerOptions: { jsx: ts.JsxEmit.ReactJSX, target: ts.ScriptTarget.ES2022 },
+    }).outputText;
   for (const f of files) {
-    const literal = readFileSync(f, "utf8").match(PLANTING_LITERAL);
+    const js = stripTypes(readFileSync(join("app/components", f), "utf8"));
+    const literal = js.match(PLANTING_LITERAL);
     assert.ok(
       literal === null,
       `${f} が作付けを直に組み立てている（makePlanting を通すこと）: ${literal?.[0]}`,
     );
   }
-  // 針の生存確認: この正規表現が作付けリテラルを実際に捕まえること。
+  // 針の生存確認: 実際の書き方（コロン・ショートハンド）を捕まえ、
+  // 型注釈は捕まえないこと。どちらかが崩れると検査の意味が変わる。
+  for (const caught of [
+    '{ id: newId("pl"), cropId, year }',
+    "{ id, cropId, year }",
+    "{ cropId, year, id }",
+  ]) {
+    assert.ok(PLANTING_LITERAL.test(caught), `作付けリテラルを検出できていない: ${caught}`);
+  }
   assert.ok(
-    PLANTING_LITERAL.test('{ id: newId("pl"), cropId, year }'),
-    "作付けリテラルを検出できていない（正規表現が死んでいる）",
+    !PLANTING_LITERAL.test(
+      stripTypes(
+        "export function F(p: { id: string; cropId: string; year: number }) { return null; }",
+      ),
+    ),
+    "型注釈だけの宣言を違反と誤判定している",
+  );
+  assert.ok(
+    !PLANTING_LITERAL.test(
+      "{ bed: b, onAddPlanting: (cropId, year) => add(b.id, cropId, year) }",
+    ),
+    "作付けを作っていない props の受け渡しを違反と誤判定している",
   );
   // 針の生存確認: 追加の経路が実際に makePlanting を呼んでいる。
   const planner = readFileSync("app/components/PlannerApp.tsx", "utf8");

@@ -21,7 +21,14 @@ type Panel = ReturnType<typeof panelVerdicts>;
 const badgeMatches: Exact<ReturnType<typeof bedBadgeStatus>, AnyStatus> = true;
 const panelBadgeMatches: Exact<Panel["badgeStatus"], AnyStatus> = true;
 const bannerMatches: Exact<NonNullable<Panel["banner"]>["status"], AnyStatus> = true;
+// プレビューは「記録できない年では判定しない」ために unknown を取りうる。
+// ここを外すと、同じ「宣言が黙って嘘に戻る」経路が1本だけ残る。
+const previewMatches: Exact<
+  NonNullable<Panel["preview"]>["status"],
+  RotationStatus | "unknown"
+> = true;
 
 void badgeMatches;
 void panelBadgeMatches;
 void bannerMatches;
+void previewMatches;
