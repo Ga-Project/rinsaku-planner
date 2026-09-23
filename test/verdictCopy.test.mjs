@@ -17,6 +17,7 @@ import {
   panelVerdicts,
 } from "../app/lib/verdictCopy.mjs";
 import { suggestPlantings } from "../app/lib/suggest.mjs";
+import { MIN_YEAR, MAX_YEAR } from "../app/lib/storage.mjs";
 import { CROPS, FAMILIES, cropById } from "../app/lib/crops.mjs";
 
 /** 暦の今年（シナリオの基準）。 */
@@ -56,7 +57,7 @@ test("①待てば実行できるなら、置ける年を名指しする", () =>
       { cropId: "tomato", year: 2026 },
       { cropId: "tomato", year: 2027 },
     ]),
-    "この2027年のトマトから見ると、2026年に同じ科の作付けがあります。間隔は1年で、トマトの目安4年に足りません。いまある記録のままだと、どの作付けからも4年あくのは早くて2031年です。",
+    "この2027年のトマトから見ると、2026年に同じ科の作付けがあります。間隔は1年で、トマトの目安4年に足りません。いまある記録のままだと、2027年より後で、どの作付けからも4年あくのは早くて2031年です。",
   );
 });
 
@@ -68,7 +69,7 @@ test("①-b 判定年が過ぎていても、待てば実行できる年は名�
       { cropId: "tomato", year: 2024 },
       { cropId: "tomato", year: 2025 },
     ]),
-    "この2025年のトマトから見ると、2024年に同じ科の作付けがあります。間隔は1年で、トマトの目安4年に足りません。いまある記録のままだと、どの作付けからも4年あくのは早くて2029年です。",
+    "この2025年のトマトから見ると、2024年に同じ科の作付けがあります。間隔は1年で、トマトの目安4年に足りません。いまある記録のままだと、2025年より後で、どの作付けからも4年あくのは早くて2029年です。",
   );
 });
 
@@ -174,7 +175,7 @@ test("⑥同じ年に同じ科が2件: 間隔0の重なりとして言い分け�
       { cropId: "tomato", year: 2026 },
       { cropId: "eggplant", year: 2026 },
     ]),
-    "2026年には、同じ科の作付けがほかにもあります。間隔があかないので、ナスの目安4年に足りません。いまある記録のままだと、どの作付けからも4年あくのは早くて2030年です。",
+    "2026年には、同じ科の作付けがほかにもあります。間隔があかないので、ナスの目安4年に足りません。いまある記録のままだと、2026年より後で、どの作付けからも4年あくのは早くて2030年です。",
   );
 });
 
@@ -539,22 +540,33 @@ function forEachUndecidablePanel(fn) {
   return count;
 }
 
+/**
+ * 「判定に入れられない記録がある」ことを常に画面へ出している面をすべて集める。
+ *
+ * 群の上の1文（undecidableNotice）だけを見ると、最新作付けの作物が一覧に無い区画で
+ * unknownCropText が同じ年を名指ししているのに「但し書きが無い」と判定してしまう。
+ * 逆にどれか1つでも出ていればよいのではなく、**年が1つ残らず名乗られていること**を
+ * 見る（畳んだ側に年が落ちると、その記録はどの面にも出なくなる）。
+ * プレビューの短句は作物を選んだときしか描かれないので、ここには含めない。
+ */
+const alwaysVisibleDisclosures = (p) =>
+  [p.undecidableNotice, p.unknownCropText].filter(Boolean);
+
 test("判定に入れられない記録は、最新でなくても但し書きが出る", () => {
   let reached = 0;
   forEachUndecidablePanel((p, plantings) => {
     const bed = bedStatus(plantings, cropById);
     if (bed.undecidableYears.length === 0) return;
     reached++;
-    assert.notEqual(
-      p.undecidableNotice,
-      null,
+    const shown = alwaysVisibleDisclosures(p);
+    assert.ok(
+      shown.length > 0,
       `判定に入れていない記録があるのに但し書きが無い: ${JSON.stringify(plantings)}`,
     );
     for (const y of bed.undecidableYears) {
-      assert.match(
-        p.undecidableNotice,
-        new RegExp(`${y}`),
-        `但し書きが ${y} 年の記録に触れていない`,
+      assert.ok(
+        shown.some((t) => t.includes(String(y))),
+        `${y} 年の記録に触れている面が1つも無い: ${JSON.stringify(plantings)}`,
       );
     }
   });
@@ -572,9 +584,8 @@ test("但し書きが無いまま「記録はありません」と断定する�
     const denials = texts.filter((t) => t.includes("記録はありません"));
     if (denials.length === 0) return;
     reached++;
-    assert.notEqual(
-      p.undecidableNotice,
-      null,
+    assert.ok(
+      alwaysVisibleDisclosures(p).length > 0,
       `但し書き無しで不在を断定している: ${denials[0]}`,
     );
   });
@@ -599,7 +610,8 @@ test("判定に入れられない記録がある区画は、植え付けOKを名
       assert.equal(p.badgeStatus, bed.status, JSON.stringify(plantings));
     } else if (bed.status === "ok") {
       sawDowngrade++;
-      assert.equal(p.badgeStatus, "unknown", JSON.stringify(plantings));
+      // 判定は出ているので「判定できず」ではない。数え切れていないことだけを言う。
+      assert.equal(p.badgeStatus, "partial", JSON.stringify(plantings));
     } else {
       assert.equal(p.badgeStatus, bed.status, JSON.stringify(plantings));
     }
@@ -679,4 +691,152 @@ test("プレビューの但し書きは、候補群と同じ文を並べない",
     p.undecidablePreviewNote.length < p.undecidableNotice.length,
     "プレビュー側が短くなっていない",
   );
+});
+
+// ---------------------------------------------------------------------------
+// 年入力の正規化（入力境界）
+// ---------------------------------------------------------------------------
+
+test("年欄に整数でない値・範囲外の値を入れても、プレビューが記録の不在を断定しない", () => {
+  // 入力欄の min/max は入力を止めない。2026.5 や 20226 がそのまま判定年になると
+  // 「同じ科の作付けの記録はありません」に落ち、同じパネルの3行下に並ぶその記録を
+  // 利用者が反証できる状態になる（さらにリロード時の丸めで判定が黙って反転する）。
+  const plantings = [
+    { cropId: "tomato", year: 2025 },
+    { cropId: "eggplant", year: 2024 },
+  ];
+  const bad = [2026.5, 20226, -5, 0, 1899.9, 3000.7, NaN, Infinity, "2026", null];
+  let reached = 0;
+  for (const formYear of bad) {
+    const p = panel(plantings, { cropId: "tomato", year: formYear });
+    assert.notEqual(p.preview, null, `プレビューが出ていない: ${String(formYear)}`);
+    reached++;
+
+    // 判定年は「実際に記録される値」でなければならない。
+    assert.ok(
+      Number.isInteger(p.preview.targetYear),
+      `判定年が整数でない: ${String(formYear)} → ${p.preview.targetYear}`,
+    );
+    assert.ok(
+      p.preview.targetYear >= MIN_YEAR && p.preview.targetYear <= MAX_YEAR,
+      `判定年が記録できる範囲の外: ${String(formYear)} → ${p.preview.targetYear}`,
+    );
+
+    // 同じ科の記録が実在するのに不在を断定しない。
+    assert.ok(
+      !p.preview.text.includes("記録はありません"),
+      `同じ科の記録があるのに不在を断定した (${String(formYear)}): ${p.preview.text}`,
+    );
+
+    // 記録できない年を名指ししない（本モジュール自身の規則）。
+    // 暦年は4桁以上。「目安4年」「間隔は1年」は期間なので拾わない。
+    for (const m of p.preview.text.matchAll(/(\d{4,})年/g)) {
+      const y = Number(m[1]);
+      assert.ok(
+        y >= MIN_YEAR && y <= MAX_YEAR,
+        `記録できない年を名指しした (${String(formYear)}): ${p.preview.text}`,
+      );
+    }
+  }
+  assert.ok(reached === bad.length, `検査に到達しなかった入力がある: ${reached}`);
+});
+
+// ---------------------------------------------------------------------------
+// 「早くて◯年」の射程
+// ---------------------------------------------------------------------------
+
+test("「早くて◯年」は、その射程の中で本当に最も早い年である", () => {
+  // findNextPlantableYear は **判定年を起点に** 探すので、判定年より前に空いている
+  // 年があっても名指ししない。射程を言わずに書くと、同じ科の記録がすべて判定年より
+  // 後にある区画で「今年すでに植えられる」のに1シーズン以上つぶす助言になる。
+  //
+  // ここでは実装の探索を使わず、記録から独立に「置ける年」を数え直して検算する。
+  const plantable = (years, req, y) => years.every((r) => Math.abs(y - r) >= req);
+
+  let reached = 0;
+  for (const [a, b] of [
+    [2027, 2027],
+    [2028, 2029],
+    [2030, 2030],
+    [2027, 2031],
+    [2026, 2026],
+    [2024, 2026],
+    [2020, 2028],
+  ]) {
+    for (const currentYear of [2026, 2027, 2028]) {
+      const plantings = [
+        { cropId: "komatsuna", year: a },
+        { cropId: "komatsuna", year: b },
+      ];
+      const p = panel(plantings, { currentYear });
+      if (p.banner === null) continue;
+      const m = p.banner.text.match(/早くて(\d+)年/);
+      if (!m) continue;
+      reached++;
+      const named = Number(m[1]);
+
+      const info = cropById("komatsuna");
+      const req = info.rotationYears;
+      const years = [a, b];
+      const judged = Math.max(a, b); // バナーの判定年＝最新作付けの年
+
+      // 文が射程を名乗っていること。名乗らないなら、判定年より前に置ける年が
+      // 1つも無いことまで保証されていなければ嘘になる。
+      const scoped = p.banner.text.includes(`${judged}年より後で`);
+      if (!scoped) {
+        for (let y = MIN_YEAR; y < named; y++) {
+          assert.ok(
+            !plantable(years, req, y),
+            `射程を名乗らずに「早くて${named}年」と書いたが、${y}年に置ける: ${p.banner.text}`,
+          );
+        }
+      }
+
+      // 名乗った射程の中では、本当に最も早い年であること。
+      for (let y = judged + 1; y < named; y++) {
+        assert.ok(
+          !plantable(years, req, y),
+          `${y}年に置けるのに「早くて${named}年」と書いている: ${p.banner.text}`,
+        );
+      }
+      assert.ok(
+        plantable(years, req, named),
+        `名指しした${named}年に実は置けない: ${p.banner.text}`,
+      );
+    }
+  }
+  assert.ok(reached > 5, `「早くて◯年」に到達した配置が少なすぎる: ${reached}`);
+});
+
+test("判定に入れられない記録が2件以上あるとき、どの年も名乗られずに消えない", () => {
+  // 最新作付けの作物が一覧に無い区画では、群の上の1文を畳んで重複を減らしている。
+  // ただし畳んでよいのは、すぐ上の unknownCropText が名乗る「最新の1年」だけで
+  // 事足りるときに限る。2件以上あるのに畳むと、残りの年はどの面にも出なくなる
+  // （総当たりのフィクスチャは未知の記録を1件しか作らないので、この配置は
+  //  そちらの検査では踏めない）。
+  let reached = 0;
+  for (const [older, newer] of [
+    [2018, 2030],
+    [2019, 2026],
+    [2005, 2031],
+  ]) {
+    const plantings = [
+      { cropId: "not-a-crop", year: older },
+      { cropId: "also-not-a-crop", year: newer },
+    ];
+    const bed = bedStatus(plantings, cropById);
+    assert.equal(bed.unknownCrop, true, "前提: 最新作付けが未知でない");
+    assert.equal(bed.undecidableYears.length, 2, "前提: 未知の記録が2件でない");
+    reached++;
+
+    const p = panel(plantings);
+    const shown = alwaysVisibleDisclosures(p);
+    for (const y of bed.undecidableYears) {
+      assert.ok(
+        shown.some((t) => t.includes(String(y))),
+        `${y} 年の記録に触れている面が1つも無い: ${JSON.stringify(plantings)} / 出ている文=${JSON.stringify(shown)}`,
+      );
+    }
+  }
+  assert.ok(reached === 3, `検査に到達した配置が少ない: ${reached}`);
 });

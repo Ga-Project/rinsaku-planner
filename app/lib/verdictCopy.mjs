@@ -18,7 +18,7 @@
 //   「どこを見てほしいか（hereLabel）」の2つだけを引数で渡す形に閉じてある。
 
 import { bedStatus, evaluateRotation } from "./rotation.mjs";
-import { MAX_YEAR } from "./storage.mjs";
+import { MAX_YEAR, normalizeYear } from "./storage.mjs";
 import { suggestPlantings, groupSuggestions } from "./suggest.mjs";
 
 /**
@@ -252,11 +252,15 @@ function closing(facts, ctx, near, req, here) {
     // 算出されるため。衝突相手が過去でも、別の未来の計画が next を押し出している
     // ことがあり、この一句だけが名指しした年を全ての配置で真にする。
     // 「{next}年からです」とは書かない。next の後ろが塞がっている配置が実在する。
+    // next は判定年を起点に探すので、**判定年より前**に空いている年があっても
+    // それは名指ししない。射程を言わずに「早くて{next}年」と書くと、同じ科の記録が
+    // すべて判定年より後にある区画で「今年すでに植えられる」のに1シーズン以上
+    // つぶす助言になる。すぐ上の MAX_YEAR 分岐と同じ但し書きを必ず付ける。
     const preamble =
       ctx.face === "bed" && ctx.hasUndecidable === true
         ? "いまある記録のうち判定に入れたぶんでは"
         : "いまある記録のままだと";
-    return `${preamble}、どの作付けからも${req}年あくのは早くて${next}年です。`;
+    return `${preamble}、${judged}年より後で、どの作付けからも${req}年あくのは早くて${next}年です。`;
   }
   return noLeverAdvice(here, judged, near);
 }
@@ -340,13 +344,16 @@ export function unknownCropText(year) {
  * @returns {import("./types").RotationStatus | "empty" | "unknown"}
  */
 export function bedBadgeStatus(bed) {
+  // 「判定の材料が無い」と「判定は出たが一部を数えられていない」は別の状態。
+  // 同じ "unknown" に潰すと、データが壊れた区画と、良い側の判定が出ている区画が
+  // グリッド上で完全に同じ見た目になり、区別する手段が画面のどこにも無くなる。
   if (bed.unknownCrop) return "unknown";
   if (bed.status === "empty") return "empty";
   if (bed.undecidableYears.length === 0) return bed.status;
   // 目安0年の科は、判定に入れられない記録が何であっても結論が変わらない。
   // ここを落とすと「判定できます」という事実まで捨てることになる。
   if (bed.requiredYears <= 0) return bed.status;
-  return bed.status === "ok" ? "unknown" : bed.status;
+  return bed.status === "ok" ? "partial" : bed.status;
 }
 
 /** 判定に入れていない記録があることを、安全を主張している文に添える一句。 */
@@ -396,18 +403,26 @@ export function panelVerdicts(input) {
   // 未知の記録を3つの経路が無言で捨て、画面が「記録はありません」と断定してしまう。
   const undecidableYears = bed.undecidableYears;
   const years = undecidableYears.join("・");
+  // 最新作付けの作物が一覧に無い区画では、すぐ上の unknownCropText が同じ年を
+  // 名指しして直し方まで言っている。ここで同じ事実を繰り返すと、320px で画面
+  // 1枚ぶんが同じ注意書きで埋まり、主機能の候補一覧に届く前に3回読ませることになる。
+  // ただし unknownCropText が名乗るのは **最新の1年だけ** なので、畳んでよいのは
+  // 判定に入れられない記録がその1件しか無いときに限る（2件以上で畳むと、残りの年が
+  // どの面にも出なくなる）。
   const undecidableNotice =
-    undecidableYears.length === 0
+    undecidableYears.length === 0 ||
+    (bed.unknownCrop && undecidableYears.length === 1)
       ? null
       : undecidableYears.length === 1
         ? `この区画には、作物が一覧にない${years}年の記録があります。その科が分からないので、この記録は判定に入れていません。`
         : `この区画には、作物が一覧にない記録が${undecidableYears.length}件（${years}年）あります。科が分からないので、これらは判定に入れていません。`;
   // プレビューにも届ける必要があるが、候補群の上と同じ文を並べると 320px で
-  // 画面1枚ぶんが同じ注意書きになる（実測 507px）。ここは短い変種にする。
+  // 画面1枚ぶんが同じ注意書きになる。枠つきの Verdict ではなく、プレビューの
+  // 科・適期を出す .muted 行に短句として合流させる（BedEditor 側で描画）。
   const undecidablePreviewNote =
     undecidableYears.length === 0
       ? null
-      : `この判定にも、一覧にない${years}年の記録は入っていません。`;
+      : `一覧にない${years}年の記録は、この判定にも入っていません。`;
 
   // --- 区画バナー: 判定年は「最新作付けの年」。ここ以外から採らない。
   let banner = null;
@@ -459,7 +474,10 @@ export function panelVerdicts(input) {
   let preview = null;
   const crop = formCropId ? cropLookup(formCropId) : undefined;
   if (crop) {
-    const judgedYear = formYear === "" ? currentYear : formYear;
+    // 入力欄の生値をそのまま判定年にすると、2026.5 のような非整数で
+    // 「同じ科の記録はありません」に落ち、同じパネルに並ぶ記録と食い違う。
+    // 実際に記録される値（整数・範囲内）で判定する。
+    const judgedYear = normalizeYear(formYear, currentYear);
     const records = plantings
       .map((p) => {
         const c = cropLookup(p.cropId);

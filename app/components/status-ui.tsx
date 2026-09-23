@@ -2,7 +2,7 @@
 import type { RotationStatus } from "../lib/types";
 import { IconStop, IconWarn, IconCheck, IconDashed, IconUnknown } from "./icons";
 
-type AnyStatus = RotationStatus | "empty" | "unknown";
+type AnyStatus = RotationStatus | "empty" | "unknown" | "partial";
 
 interface Meta {
   label: string;
@@ -17,7 +17,12 @@ const META: Record<AnyStatus, Meta> = {
   empty: { label: "未設定", cls: "is-empty", Icon: IconDashed },
   // 作付けはあるが、作物が一覧に無くて判定できない状態。「未設定」と名乗ると
   // 「記録が1件ある」ことと矛盾するので別の状態として持つ。
-  unknown: { label: "判定できません", cls: "is-unknown", Icon: IconUnknown },
+  // 語長は 320px の2列グリッドで折り返さない 5 全角までに収める（長い説明は
+  // 編集パネルのバナーが持つ）。「判定できません」は実測 84px で内幅 82px を超えた。
+  unknown: { label: "判定できず", cls: "is-unknown", Icon: IconUnknown },
+  // 判定は出ているが、判定に入れられない記録が残っている状態。unknown と同じ
+  // 中性面で出すが、「判定できず」と名乗ると出ている結論を捨てたことになる。
+  partial: { label: "一部未判定", cls: "is-unknown", Icon: IconUnknown },
 };
 
 /** 区画セルに出す小さなステートバッジ。 */

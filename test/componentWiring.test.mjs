@@ -23,7 +23,8 @@ import { mkdirSync, readFileSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import ts from "typescript";
-import { CROPS } from "../app/lib/crops.mjs";
+import { CROPS, cropById } from "../app/lib/crops.mjs";
+import { panelVerdicts } from "../app/lib/verdictCopy.mjs";
 import { renderToStaticMarkup } from "react-dom/server";
 import { createElement as h } from "react";
 
@@ -63,7 +64,10 @@ before(async () => {
 const noop = () => {};
 
 /** 区画の編集パネルを実際に描画して HTML を返す。 */
-function render(plantings, { currentYear = 2026, currentMonth = 9 } = {}) {
+function render(
+  plantings,
+  { currentYear = 2026, currentMonth = 9, initialCropId, initialYear } = {},
+) {
   const bed = {
     id: "b1",
     label: "畝1",
@@ -79,6 +83,8 @@ function render(plantings, { currentYear = 2026, currentMonth = 9 } = {}) {
       onAddPlanting: noop,
       onRemovePlanting: noop,
       onDeleteBed: noop,
+      initialCropId,
+      initialYear,
     }),
   );
 }
@@ -113,7 +119,7 @@ test("区画バナーに、判定した年と作物を主語にした文が実�
   // 本文は空でない完全な文であること（中身を落とす退行をここで捕まえる）。
   assert.equal(
     verdictText(html),
-    "この2027年のトマトから見ると、2026年に同じ科の作付けがあります。間隔は1年で、トマトの目安4年に足りません。いまある記録のままだと、どの作付けからも4年あくのは早くて2031年です。",
+    "この2027年のトマトから見ると、2026年に同じ科の作付けがあります。間隔は1年で、トマトの目安4年に足りません。いまある記録のままだと、2027年より後で、どの作付けからも4年あくのは早くて2031年です。",
   );
 });
 
@@ -281,10 +287,31 @@ test("グリッドと編集パネルは、同じ区画に同じ状態名を出�
       `状態名が食い違っている (${JSON.stringify(plantings)}): グリッド=${label(grid)} / パネル=${label(panel)}`,
     );
   }
-  // 針の生存確認。判定不能の区画で実際に「判定できません」が出ていること。
-  assert.match(
-    renderGrid([{ cropId: "not-a-crop", year: 2026 }]),
-    /判定できません/,
+  // 針の生存確認。抽出器が実際にラベルを取れていること（文面には依存しない）。
+  const label = (html) => {
+    const m = html.match(
+      /<span class="bed-state [^"]*"><svg[\s\S]*?<\/svg><span>([^<]*)<\/span>/,
+    );
+    return m ? m[1] : null;
+  };
+  const noMaterial = renderGrid([{ cropId: "not-a-crop", year: 2026 }]);
+  assert.ok(
+    label(noMaterial) && label(noMaterial).length > 0,
+    "判定材料の無い区画からラベルを抽出できていない（抽出器が壊れている）",
+  );
+
+  // 「判定の材料が無い」区画と「判定は出たが数えられていない記録がある」区画は、
+  // グリッド上で見分けられなければならない。同じラベルに潰すと、データが壊れた
+  // 区画と、良い側の結論が出ている区画が完全に同じ見た目になる。
+  const partial = renderGrid([
+    { cropId: "not-a-crop", year: 2018 },
+    { cropId: "tomato", year: 2026 },
+  ]);
+  assert.ok(label(partial), "一部未判定の区画からラベルを抽出できていない");
+  assert.notEqual(
+    label(noMaterial),
+    label(partial),
+    `判定材料が無い区画と一部未判定の区画が同じラベル（${label(partial)}）になっている`,
   );
 });
 
@@ -359,5 +386,126 @@ test("コンポーネントは判定文を自前で組み立てない", () => {
         `${name}.tsx が判定文を自前で持っている: ${banned}`,
       );
     }
+  }
+});
+
+// ---------------------------------------------------------------------------
+// 3面それぞれが「返ってきた文と状態」をそのまま描いていることの固定
+//
+// ソース文字列の出現回数で数えると、描画を丸ごと消す退行でも数が変わらないため
+// 針にならない（実測で素通りした）。ここでは panelVerdicts の返り値を正本として、
+// 実際に描かれた段落の**本文とクラス**の両方を突き合わせる。
+// ---------------------------------------------------------------------------
+
+/** 判定段落（本文・状態クラス）をすべて取り出す。 */
+function verdicts(html) {
+  return [...html.matchAll(/<p class="verdict (is-[a-z]+)"[^>]*>(.*?)<\/p>/gs)].map(
+    (m) => ({ cls: m[1], text: m[2].replace(/<[^>]+>/g, "").trim() }),
+  );
+}
+
+test("プレビュー面は、返ってきた文と状態をそのまま描く", () => {
+  // 作物を選ぶまでプレビューは現れないので、初期値を渡して到達させる。
+  // これが無いと、プレビューの配線は描画を伴う検査に一度も掛からない。
+  let reached = 0;
+  for (const [plantings, cropId, year] of [
+    [[{ cropId: "tomato", year: 2025 }], "tomato", 2026],
+    [[{ cropId: "tomato", year: 2020 }], "eggplant", 2026],
+    [[{ cropId: "komatsuna", year: 2027 }], "komatsuna", 2026],
+    [[{ cropId: "not-a-crop", year: 2018 }, { cropId: "tomato", year: 2026 }], "tomato", 2027],
+  ]) {
+    const html = render(plantings, { initialCropId: cropId, initialYear: year });
+    const p = panelVerdicts({
+      plantings,
+      month: 9,
+      currentYear: 2026,
+      formCropId: cropId,
+      formYear: year,
+      cropLookup: cropById,
+      crops: CROPS,
+    });
+    assert.notEqual(p.preview, null, "前提: プレビューが組み立てられていない");
+    reached++;
+
+    const shown = verdicts(html);
+    const hit = shown.filter((v) => v.text === p.preview.text);
+    assert.ok(
+      hit.length > 0,
+      `プレビューの文が描かれていない。期待: ${p.preview.text}\n実際に出た段落: ${JSON.stringify(shown, null, 1)}`,
+    );
+    assert.ok(
+      hit.some((v) => v.cls === `is-${p.preview.status}`),
+      `プレビューの状態が食い違う。期待 is-${p.preview.status} / 実際 ${hit.map((v) => v.cls).join(",")}`,
+    );
+  }
+  assert.ok(reached === 4, `検査に到達した配置が少ない: ${reached}`);
+});
+
+test("区画バナーは、バッジと同じ状態をクラスにも出す", () => {
+  // バッジの文言だけを見る検査では、バナー側の色・アイコンだけを別状態へ
+  // 差し替える退行が通る（「判定できません」の真下にバナーが緑で並ぶ）。
+  let reached = 0;
+  for (const plantings of [
+    [{ cropId: "tomato", year: 2025 }],
+    [{ cropId: "tomato", year: 2024 }, { cropId: "tomato", year: 2026 }],
+    [{ cropId: "not-a-crop", year: 2020 }, { cropId: "tomato", year: 2026 }],
+    [{ cropId: "not-a-crop", year: 2018 }, { cropId: "komatsuna", year: 2026 }],
+  ]) {
+    const html = render(plantings);
+    const p = panelVerdicts({
+      plantings,
+      month: 9,
+      currentYear: 2026,
+      formCropId: "",
+      formYear: "",
+      cropLookup: cropById,
+      crops: CROPS,
+    });
+    if (p.banner === null) continue;
+    reached++;
+    const hit = verdicts(html).filter((v) => v.text === p.banner.text);
+    assert.ok(hit.length > 0, `バナーの文が描かれていない: ${p.banner.text}`);
+
+    // 状態クラスは「状態名と同じ綴り」ではない（partial は unknown と同じ中性面を
+    // 共有し、区別はラベルが持つ）。ここで固定したいのは綴りではなく、
+    // **同じパネルに並ぶバッジとバナーが同じ状態を名乗ること**。
+    const badgeCls = html.match(/<span class="bed-state (is-[a-z]+)"/);
+    assert.ok(badgeCls, "バッジが描かれていない");
+    assert.ok(
+      hit.some((v) => v.cls === badgeCls[1]),
+      `バッジ(${badgeCls[1]})とバナー(${hit.map((v) => v.cls).join(",")})が別の状態を名乗っている`,
+    );
+  }
+  assert.ok(reached === 4, `バナーに到達した配置が少ない: ${reached}`);
+});
+
+test("候補チップの補助ラベルは、返ってきた note をそのまま描く", () => {
+  // 補助ラベルが落ちると、本文が「ずらせ」しか言わない前提が静かに崩れ、
+  // 目で読む人と読み上げの人が別の助言を受け取る。
+  const plantings = [{ cropId: "tomato", year: 2026 }];
+  const html = render(plantings, { currentYear: 2026, currentMonth: 4 });
+  const p = panelVerdicts({
+    plantings,
+    month: 4,
+    currentYear: 2026,
+    formCropId: "",
+    formYear: "",
+    cropLookup: cropById,
+    crops: CROPS,
+  });
+  const notes = [
+    ...p.groups.now,
+    ...p.groups.caution,
+    ...p.groups.avoid,
+    ...p.groups.soon,
+  ]
+    .map((c) => c.note)
+    .filter(Boolean);
+  assert.ok(notes.length > 0, "前提: 補助ラベルを持つ候補が1件も無い");
+  for (const note of notes) {
+    assert.ok(
+      html.includes(`<span class="plantnow-chip-note">${note}</span>`),
+      `補助ラベルが描かれていない: ${note}`,
+    );
   }
 });

@@ -5,6 +5,7 @@ import type { Bed, BedKind, PanelChip } from "../lib/types";
 import { CROPS, cropById, cropsGroupedByFamily } from "../lib/crops.mjs";
 import { summarizeMonths } from "../lib/schedule.mjs";
 import { panelVerdicts } from "../lib/verdictCopy.mjs";
+import { normalizeYear } from "../lib/storage.mjs";
 import { Verdict, StateBadge } from "./status-ui";
 import { PlantNow } from "./PlantNow";
 import { IconPlus, IconTrash } from "./icons";
@@ -19,6 +20,8 @@ export function BedEditor({
   onAddPlanting,
   onRemovePlanting,
   onDeleteBed,
+  initialCropId = "",
+  initialYear,
 }: {
   bed: Bed;
   currentYear: number;
@@ -27,11 +30,18 @@ export function BedEditor({
   onAddPlanting: (cropId: string, year: number) => void;
   onRemovePlanting: (plantingId: string) => void;
   onDeleteBed: () => void;
+  /**
+   * 追加フォームの初期値。既定は「未選択・今年」で、通常の利用では渡さない。
+   * プレビュー面は作物を選ぶまで描かれないため、これが無いと**描画を伴う検査で
+   * プレビューに一度も到達できない**（＝プレビューの配線が固定できない）。
+   */
+  initialCropId?: string;
+  initialYear?: number | "";
 }) {
-  const [cropId, setCropId] = useState("");
+  const [cropId, setCropId] = useState(initialCropId);
   // 空文字を許容して、年をバックスペースで消して入力し直せるようにする。
   // 追加・プレビュー時のみ currentYear を既定値として適用する。
-  const [year, setYear] = useState<number | "">(currentYear);
+  const [year, setYear] = useState<number | "">(initialYear ?? currentYear);
   const [confirmDelete, setConfirmDelete] = useState(false);
   // 候補を押したときに何が起きたかを読み上げ・目視の双方に伝える（選択は画面下のフォームで起きる）。
   const [pickNotice, setPickNotice] = useState("");
@@ -55,7 +65,12 @@ export function BedEditor({
 
   function handleAdd() {
     if (!cropId) return;
-    onAddPlanting(cropId, year === "" ? currentYear : year);
+    // 入力欄は 2026.5 や 20226 をそのまま受け取れる（min/max は入力を止めない）。
+    // 生値のまま保存すると、リロード時の丸めで利用者が何もしていないのに
+    // 判定が反転する。記録する値をここで確定し、欄にも書き戻して一致させる。
+    const normalized = normalizeYear(year, currentYear);
+    setYear(normalized);
+    onAddPlanting(cropId, normalized);
     setCropId("");
   }
 
@@ -206,23 +221,22 @@ export function BedEditor({
 
       {panel.preview !== null && (
         <div style={{ marginTop: "var(--sp-3)" }}>
+          {/* 但し書きはチップ群の上にもあるが、プレビューはその下にあるので
+              ここにも届ける（下だけを見ている人に伝わらない）。ただし枠つきの
+              Verdict を重ねると同じ事実が1パネルに3回並ぶので、科・適期を出す
+              この muted 行に短句として合流させる。 */}
           <p className="muted" style={{ marginBottom: "var(--sp-1)" }}>
             {panel.preview.crop.familyJa}・種まき/植え付け{" "}
             {summarizeMonths(panel.preview.crop.sowMonths)}／収穫{" "}
             {summarizeMonths(panel.preview.crop.harvestMonths)}
+            {panel.undecidablePreviewNote !== null && (
+              <>
+                {" "}
+                {panel.undecidablePreviewNote}
+              </>
+            )}
           </p>
-          {/* 但し書きはチップ群の上にもあるが、プレビューはその下にあるので
-              ここにも届ける（下だけを見ている人に、判定に入れていない記録がある
-              ことが伝わらない）。 */}
-          {/* 候補群の上と同じ文を並べると、320px で画面1枚ぶんが同じ注意書きに
-              なる。ここは「この判定にも入っていない」だけを短く言う。 */}
-          {panel.undecidablePreviewNote !== null && (
-            <Verdict
-              status="unknown"
-              text={panel.undecidablePreviewNote}
-              live={false}
-            />
-          )}
+
           {/* 年入力は1打鍵ごとに再計算されるので、読み上げは通知しない
               （途中の値で長文が繰り返し読まれる）。選択結果は下の pickNotice が伝える。 */}
           <Verdict

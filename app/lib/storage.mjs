@@ -49,6 +49,24 @@ function clampInt(value, min, max, fallback) {
   return n;
 }
 
+/**
+ * 入力された年を、実際に記録できる値へ正す（整数化 + MIN_YEAR〜MAX_YEAR に丸め）。
+ *
+ * 読み込み時の sanitizePlanting は同じ丸めをするが、**入力時には誰も通していなかった**。
+ * そのため `2026.5` や `20226` がそのまま判定へ流れ、判定年が非整数だと「同じ科の記録は
+ * ありません」に落ちて、3行下に並ぶその記録を利用者が反証できる状態になっていた。
+ * さらに保存値はリロードで黙って丸められ、植え付けOKが連作NGへ反転していた。
+ * 入力境界（追加・プレビュー）をここに通すことで、保存される値と画面の判定が一致する。
+ *
+ * @template {number | null} F
+ * @param {unknown} value 入力された年（非数・非整数・範囲外を受け取りうる）
+ * @param {F} fallback 年として読めないときに返す値
+ * @returns {number | F}
+ */
+export function normalizeYear(value, fallback = /** @type {any} */ (null)) {
+  return clampInt(value, MIN_YEAR, MAX_YEAR, fallback);
+}
+
 function sanitizePlanting(p) {
   if (!p || typeof p !== "object") return null;
   if (typeof p.cropId !== "string" || p.cropId.length === 0) return null;
