@@ -67,6 +67,24 @@ export function normalizeYear(value, fallback = /** @type {any} */ (null)) {
   return clampInt(value, MIN_YEAR, MAX_YEAR, fallback);
 }
 
+/**
+ * 作付け1件を作る。**記録を作る経路は必ずここを通す。**
+ *
+ * 正規化を画面側（入力フォーム）に置いていたときは、そこを外しても全ゲートが緑の
+ * まま通った。描画を伴う検査はフォームの操作を起こせず、lib のテストは components を
+ * 読まないためで、外れると「入力欄は丸めた年を表示し、保存されるのは生値」という
+ * 最も気づきにくい形で戻る。年を正すのは保存する値の性質なので、書き込み境界の
+ * 純粋関数に置いて、描画に依存せず固定できるようにする。
+ *
+ * @param {string} cropId
+ * @param {unknown} year 入力された年（非整数・範囲外を受け取りうる）
+ * @param {number} fallbackYear 年として読めないときに使う年
+ * @returns {{id: string, cropId: string, year: number}}
+ */
+export function makePlanting(cropId, year, fallbackYear) {
+  return { id: newId("p"), cropId, year: normalizeYear(year, fallbackYear) };
+}
+
 function sanitizePlanting(p) {
   if (!p || typeof p !== "object") return null;
   if (typeof p.cropId !== "string" || p.cropId.length === 0) return null;

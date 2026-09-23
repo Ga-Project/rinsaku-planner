@@ -224,8 +224,8 @@ select:focus {
 .bed-state {
   display: inline-flex;
   align-items: center;
-  /* バッジの語長は status-ui.tsx 側で 320px の内幅に収まる 5 全角までに
-     制限してある。ここで間隔を削って回避しない（全バッジに効いてしまう）。 */
+  /* gap は詰めない。「判定できません」が2列グリッドで内幅を超えたのはラベル側の
+     問題で、間隔を削ると全バッジに効いてしまう。語長の上限は status-ui.tsx が持つ。 */
   gap: var(--sp-1);
   font-size: var(--fs-xs);
   font-weight: var(--fw-bold);

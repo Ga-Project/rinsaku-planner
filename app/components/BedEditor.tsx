@@ -215,6 +215,11 @@ export function BedEditor({
             onChange={(e) =>
               setYear(e.target.value === "" ? "" : Number(e.target.value))
             }
+            // 入力中は生値のまま持つ（途中の「202」を 1900 に丸めると打ち直せない）。
+            // 手を止めた時点で、実際に記録される値へ正して欄に書き戻す。これをしないと
+            // 範囲外の年を入れた人が、自分が打っていない年についての判定を読むことになる
+            // （「202」で「間隔は1099年あり」＝画面のどの数字からも導けない）。
+            onBlur={() => setYear((y) => (y === "" ? "" : normalizeYear(y, currentYear)))}
           />
         </div>
       </div>

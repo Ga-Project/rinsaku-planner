@@ -332,7 +332,7 @@ export function unknownCropText(year) {
  * 区画のバッジに出す状態値。**グリッドと編集パネルの両方がこれを通す。**
  *
  * 導出を2箇所に置くと、規則を変えたとき片方だけが古いままになり、同じ区画に
- * ついてグリッドが「植え付けOK」・パネルが「判定できません」と名乗る。実際に
+ * ついてグリッドが「植え付けOK」・パネルが「判定できず」と名乗る。実際に
  * 一度そうなった（判定に入れられない記録の扱いを変えたとき、グリッド側が
  * 取り残された）。
  *
@@ -341,7 +341,7 @@ export function unknownCropText(year) {
  * なのでそのまま残す（判定できないことを理由に警告を消すほうが危険）。
  *
  * @param {import("./types").BedRotation} bed
- * @returns {import("./types").RotationStatus | "empty" | "unknown"}
+ * @returns {import("./types").RotationStatus | "empty" | "unknown" | "partial"}
  */
 export function bedBadgeStatus(bed) {
   // 「判定の材料が無い」と「判定は出たが一部を数えられていない」は別の状態。
@@ -383,8 +383,8 @@ const UNDECIDABLE_CAVEAT =
  * @param {(cropId: string) => (any | undefined)} input.cropLookup
  * @param {any[]} input.crops 作物マスタ
  * @returns {{
- *   banner: {status: RotationStatus, text: string, latestCropId: string, latestYear: number} | null,
- *   badgeStatus: RotationStatus | "empty" | "unknown",
+ *   banner: {status: RotationStatus | "empty" | "unknown" | "partial", text: string, latestCropId: string, latestYear: number} | null,
+ *   badgeStatus: RotationStatus | "empty" | "unknown" | "partial",
  *   undecidableYears: number[],
  *   undecidableNotice: string | null,
  *   undecidablePreviewNote: string | null,

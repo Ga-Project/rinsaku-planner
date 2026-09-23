@@ -9,6 +9,10 @@ import {
   loadState,
   saveState,
   newId,
+  makePlanting,
+  normalizeYear,
+  MIN_YEAR,
+  MAX_YEAR,
   STORAGE_KEY,
   CURRENT_VERSION,
 } from "../app/lib/storage.mjs";
@@ -196,3 +200,60 @@ test("saveState: 書き込み失敗（容量超過等）は false を返す", ()
   };
   assert.equal(saveState(sampleState(), store), false);
 });
+
+test("makePlanting: 記録する年は必ず整数で、記録できる範囲に収まる", () => {
+  // 正規化を画面側だけに置いていたときは、そこを外しても全ゲートが緑のまま通った
+  // （描画を伴う検査はフォーム操作を起こせず、lib のテストは components を読まない）。
+  // 外れると「入力欄は丸めた年を表示し、保存されるのは生値」という最も気づきにくい
+  // 形で戻り、リロードのたびに判定が反転する。記録を作る経路はここを通す。
+  const cases = [
+    [2026.5, 2026],
+    [2026.999, 2026],
+    [20226, MAX_YEAR],
+    [-5, MIN_YEAR],
+    [0, MIN_YEAR],
+    [1899, MIN_YEAR],
+    [1900, 1900],
+    [3000, 3000],
+    [3001, MAX_YEAR],
+  ];
+  for (const [input, expected] of cases) {
+    const p = makePlanting("tomato", input, 2026);
+    assert.equal(p.year, expected, `makePlanting(${input}) の年が ${p.year}`);
+    assert.ok(Number.isInteger(p.year), `年が整数でない: ${input}`);
+    assert.equal(p.cropId, "tomato");
+    assert.ok(typeof p.id === "string" && p.id.length > 0, "id が無い");
+  }
+
+  // 年として読めない値は控えに倒す（空欄・NaN・文字列）。
+  for (const bad of ["", NaN, Infinity, -Infinity, null, undefined, "2026"]) {
+    assert.equal(
+      makePlanting("tomato", bad, 2026).year,
+      2026,
+      `読めない年が控えに倒れていない: ${String(bad)}`,
+    );
+  }
+
+  // 保存して読み直しても値が変わらない（丸めの往復でズレない＝判定が反転しない）。
+  for (const [input] of cases) {
+    const made = makePlanting("tomato", input, 2026);
+    assert.equal(
+      sanitizeRoundTripYear(made.year),
+      made.year,
+      `保存・読み込みで年が変わる: ${input} → ${made.year}`,
+    );
+  }
+});
+
+/** 保存→読み込みの丸めを1件ぶんだけ通して、年がそのまま戻るかを見る。 */
+function sanitizeRoundTripYear(year) {
+  const mem = new Map();
+  const store = {
+    getItem: (k) => (mem.has(k) ? mem.get(k) : null),
+    setItem: (k, v) => mem.set(k, v),
+  };
+  const state = sampleState();
+  state.gardens[0].beds[0].plantings = [{ id: "p1", cropId: "tomato", year }];
+  saveState(state, store);
+  return loadState(store).gardens[0].beds[0].plantings[0].year;
+}

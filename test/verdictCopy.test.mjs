@@ -647,11 +647,46 @@ test("安全を主張する文にだけ、言い切れない旨を添える", ()
     } else {
       // ng の結論は覆らない。文を足さず、年を名指しする締めの前置きだけを直す。
       assert.doesNotMatch(t, /言い切れません|短いかもしれません/, t);
-      if (/早くて\d{4}年です。$/.test(t)) {
-        assert.match(t, /いまある記録のうち判定に入れたぶんでは/, t);
-      }
+      // 「早くて◯年」の締めはこの総当たり（既知の作付けが1件）では ng にならず
+      // 一度も出ない。到達件数を数えて確かめたところ 0 だったので、条件付きの
+      // assert をここに置いても永久に走らない。専用のテストへ移した（下記）。
     }
   });
+});
+
+test("判定に入れられない記録がある区画の「早くて◯年」は、数え落としを前置きする", () => {
+  // 上の総当たりでは ng に到達しないため、既知の同じ科を2件置いて明示的に作る。
+  // 前置きが落ちると、判定に入れていない記録があるのに「いまある記録のままだと」と
+  // 断定してしまい、名指しした年が全ての記録を踏まえたものだと読める。
+  let reached = 0;
+  for (const [a, b] of [
+    [2024, 2026],
+    [2025, 2026],
+    [2023, 2026],
+  ]) {
+    const plantings = [
+      { cropId: "not-a-crop", year: 2018 },
+      { cropId: "tomato", year: a },
+      { cropId: "tomato", year: b },
+    ];
+    const bed = bedStatus(plantings, cropById);
+    assert.equal(bed.status, "ng", `前提: ng になっていない (${a},${b})`);
+    assert.ok(bed.undecidableYears.length > 0, "前提: 未判定の記録が無い");
+
+    const p = panel(plantings, { currentYear: 2026 });
+    if (!/早くて\d{4}年です。/.test(p.banner.text)) continue;
+    reached++;
+    assert.match(
+      p.banner.text,
+      /いまある記録のうち判定に入れたぶんでは/,
+      `数え落としの前置きが無い: ${p.banner.text}`,
+    );
+    assert.ok(
+      !p.banner.text.includes("いまある記録のままだと"),
+      `全件を踏まえたかのように断定している: ${p.banner.text}`,
+    );
+  }
+  assert.ok(reached > 0, "「早くて◯年」の締めに一度も到達していない（針が死んでいる）");
 });
 
 test("但し書きは件数に合わせて単複を言い分ける", () => {

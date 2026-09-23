@@ -2,7 +2,13 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { AppState, Bed, Garden } from "../lib/types";
-import { loadState, saveState, emptyState, newId } from "../lib/storage.mjs";
+import {
+  loadState,
+  saveState,
+  emptyState,
+  newId,
+  makePlanting,
+} from "../lib/storage.mjs";
 import { BedGrid } from "./BedGrid";
 import { BedEditor } from "./BedEditor";
 import { ScheduleTimeline } from "./ScheduleTimeline";
@@ -117,13 +123,15 @@ export function PlannerApp() {
 
   const addPlanting = useCallback(
     (bedId: string, cropId: string, year: number) => {
+      // 年として読めない値が来たときだけ使う控え。記録を作る瞬間の暦年でよい。
+      const fallbackYear = new Date().getFullYear();
       updateActiveGarden((g) => ({
         ...g,
         beds: g.beds.map((b) =>
           b.id === bedId
             ? {
                 ...b,
-                plantings: [...b.plantings, { id: newId("p"), cropId, year }],
+                plantings: [...b.plantings, makePlanting(cropId, year, fallbackYear)],
               }
             : b,
         ),

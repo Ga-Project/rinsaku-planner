@@ -509,3 +509,62 @@ test("候補チップの補助ラベルは、返ってきた note をそのま�
     );
   }
 });
+
+test("プレビューの但し書きは、枠ではなく科・適期の行に合流して描かれる", () => {
+  // ソース文字列の出現回数だけで守っていたときは、出現回数を保ったまま描画を止める
+  // 退行（`… !== null && false && (`）が全テストを素通りした。描画で固定する。
+  const plantings = [
+    { cropId: "not-a-crop", year: 2018 },
+    { cropId: "tomato", year: 2026 },
+  ];
+  const html = render(plantings, { initialCropId: "tomato", initialYear: 2027 });
+  const p = panelVerdicts({
+    plantings,
+    month: 9,
+    currentYear: 2026,
+    formCropId: "tomato",
+    formYear: 2027,
+    cropLookup: cropById,
+    crops: CROPS,
+  });
+  assert.notEqual(p.undecidablePreviewNote, null, "前提: 短い変種が組み立てられていない");
+
+  // 実際に描かれていること。
+  assert.ok(
+    html.includes(p.undecidablePreviewNote),
+    `プレビューの但し書きが描かれていない: ${p.undecidablePreviewNote}`,
+  );
+
+  // 枠つきの Verdict に戻っていないこと（1パネルに同じ事実の枠が3つ並ぶ退行）。
+  assert.ok(
+    !verdicts(html).some((v) => v.text.includes(p.undecidablePreviewNote)),
+    "但し書きが Verdict 枠として描かれている（.muted 行への合流が外れた）",
+  );
+});
+
+test("作付けを作れるのは storage の makePlanting だけ", () => {
+  // 年の正規化は makePlanting の中にある。コンポーネント側で作付けオブジェクトを
+  // 直に組み立てられると、そこだけ正規化を通らない記録が生まれ、入力欄は丸めた年を
+  // 表示するのに保存されるのは生値、という最も気づきにくい形で戻る。
+  // このゲートは描画で踏めない（React のイベントを起こす手段を、依存を増やさずには持てない）ので、
+  // 「作付けの id を作る手段が storage の外に無い」ことをソースで固定する。
+  const files = [
+    "app/components/PlannerApp.tsx",
+    "app/components/BedEditor.tsx",
+    "app/components/BedGrid.tsx",
+  ];
+  for (const f of files) {
+    const src = readFileSync(f, "utf8");
+    assert.ok(
+      !/newId\(\s*["']p["']\s*\)/.test(src),
+      `${f} が作付けの id を直に作っている。makePlanting を通すこと`,
+    );
+  }
+  // 針の生存確認: 追加の経路が実際に makePlanting を呼んでいる。
+  const planner = readFileSync("app/components/PlannerApp.tsx", "utf8");
+  assert.match(
+    planner,
+    /makePlanting\(/,
+    "追加の経路が makePlanting を通っていない",
+  );
+});
