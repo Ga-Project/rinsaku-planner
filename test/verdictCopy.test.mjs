@@ -875,3 +875,45 @@ test("判定に入れられない記録が2件以上あるとき、どの年も�
   }
   assert.ok(reached === 3, `検査に到達した配置が少ない: ${reached}`);
 });
+
+test("記録できない年を打っている間は、判定を出さない", () => {
+  // 「2027」を打つ途中の「2」「20」「202」はどれも範囲外。丸めた 1900 で判定すると、
+  // 連作NGの区画で「間隔は123年あり、目安4年をこえています」＝安全側を断定し、
+  // しかも 123 は画面のどの数字からも導けない（1900 はどこにも出ない）。
+  const plantings = [
+    { cropId: "tomato", year: 2023 },
+    { cropId: "tomato", year: 2026 },
+  ];
+  const bed = bedStatus(plantings, cropById);
+  assert.equal(bed.status, "ng", "前提: 連作NGの区画になっていない");
+
+  let reached = 0;
+  for (const bad of [2, 20, 202, 1899, 3001, 20226, -5]) {
+    const p = panel(plantings, { cropId: "tomato", year: bad, currentYear: 2026 });
+    assert.notEqual(p.preview, null, `プレビューが無い: ${bad}`);
+    reached++;
+
+    // 安全を主張しない。
+    assert.notEqual(
+      p.preview.status,
+      "ok",
+      `記録できない年(${bad})で植え付けOKを名乗った: ${p.preview.text}`,
+    );
+    // 間隔の年数を断定しない（画面から検算できない数字を出さない）。
+    assert.ok(
+      !/間隔は\d+年/.test(p.preview.text),
+      `記録できない年(${bad})で間隔を断定した: ${p.preview.text}`,
+    );
+    // 記録できる範囲を名乗り、まだ判定していないと言う。
+    assert.match(p.preview.text, /まだ判定できません/, String(bad));
+  }
+  assert.ok(reached === 7, `検査に到達した入力が少ない: ${reached}`);
+
+  // 範囲内なら従来どおり判定する（上の分岐が広すぎて判定を殺していないこと）。
+  const okYear = panel(plantings, { cropId: "tomato", year: 2027, currentYear: 2026 });
+  assert.match(okYear.preview.text, /間隔は\d+年/, "範囲内の年で判定が出ていない");
+  assert.ok(
+    !/まだ判定できません/.test(okYear.preview.text),
+    "範囲内の年なのに判定を控えている",
+  );
+});

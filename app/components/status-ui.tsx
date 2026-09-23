@@ -1,8 +1,8 @@
 // 連作ステートの表示部品。色＋アイコン形状＋テキストの三重符号化で色覚に依存しない。
-import type { RotationStatus } from "../lib/types";
 import { IconStop, IconWarn, IconCheck, IconDashed, IconUnknown } from "./icons";
-
-type AnyStatus = RotationStatus | "empty" | "unknown" | "partial";
+// 状態の集合は lib 側と1つにする。ここで独自に宣言すると、lib が返す型と
+// 画面が受ける型が別々に動けてしまい、宣言のずれを誰も検出できない。
+import type { AnyStatus } from "../lib/statusContract";
 
 interface Meta {
   label: string;
@@ -21,7 +21,9 @@ const META: Record<AnyStatus, Meta> = {
   // 既定の 4 列（PlannerApp の初期値）は 320px・375px とも内幅 57px まで詰まるので、
   // そこでは 5 全角はこのラベルに限らず「植え付けOK」「間隔に注意」も2行になる。
   // 4 列で1行に収めたいなら、語長ではなくグリッドの minmax 側を動かすこと。
-  // 「判定できません」(7全角) は2列でも実測 84px で内幅 82px を超えていた。
+  // 「判定できません」(7全角) は2列でも nowrap 実測 84px。ラベルに使えるのは
+  // バッジ幅 100px − アイコン実寸 16px − gap 4px = 80px なので入らない
+  //（svg は width="1em" だが実描画は 16px。12px で計算しないこと）。
   unknown: { label: "判定できず", cls: "is-unknown", Icon: IconUnknown },
   // 判定は出ているが、判定に入れられない記録が残っている状態。unknown と同じ
   // 中性面で出すが、「判定できず」と名乗ると出ている結論を捨てたことになる。

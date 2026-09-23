@@ -10,7 +10,6 @@ import {
   saveState,
   newId,
   makePlanting,
-  normalizeYear,
   MIN_YEAR,
   MAX_YEAR,
   STORAGE_KEY,

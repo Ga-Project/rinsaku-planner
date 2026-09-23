@@ -18,7 +18,7 @@
 //   「どこを見てほしいか（hereLabel）」の2つだけを引数で渡す形に閉じてある。
 
 import { bedStatus, evaluateRotation } from "./rotation.mjs";
-import { MAX_YEAR, normalizeYear } from "./storage.mjs";
+import { MIN_YEAR, MAX_YEAR, normalizeYear } from "./storage.mjs";
 import { suggestPlantings, groupSuggestions } from "./suggest.mjs";
 
 /**
@@ -391,7 +391,7 @@ const UNDECIDABLE_CAVEAT =
  *   unknownCropText: string | null,
  *   groups: PanelGroups,
  *   totalChips: number,
- *   preview: {crop: any, status: RotationStatus, text: string, targetYear: number} | null,
+ *   preview: {crop: any, status: RotationStatus | "unknown", text: string, targetYear: number} | null,
  * }}
  */
 export function panelVerdicts(input) {
@@ -478,29 +478,49 @@ export function panelVerdicts(input) {
     // 「同じ科の記録はありません」に落ち、同じパネルに並ぶ記録と食い違う。
     // 実際に記録される値（整数・範囲内）で判定する。
     const judgedYear = normalizeYear(formYear, currentYear);
-    const records = plantings
-      .map((p) => {
-        const c = cropLookup(p.cropId);
-        return c ? { familyKey: c.familyKey, year: p.year } : null;
-      })
-      .filter((x) => x !== null);
-    const result = evaluateRotation(
-      /** @type {any[]} */ (records),
-      crop.familyKey,
-      crop.rotationYears,
-      judgedYear,
-    );
-    preview = {
-      crop,
-      status: result.status,
-      targetYear: judgedYear,
-      text: rotationSentence(result, {
-        cropName: crop.nameJa,
+
+    // ただし、記録できる範囲の外にある年は **丸めた年で判定しない**。
+    // 「2027」を打つ途中の「2」「20」「202」はどれも範囲外で、丸めると 1900 になる。
+    // その 1900 は画面のどこにも出ないので「間隔は123年あり」という、画面のどの数字
+    // からも導けない文が出る。しかも連作NGの区画で3打鍵ぶん「目安をこえています」＝
+    // 安全側を断定してしまう。この製品の他の文は一貫して「言い切れないことは
+    // 言い切らない」で書かれているので、ここも判定を出さないほうに倒す。
+    const outOfRange =
+      typeof formYear === "number" &&
+      Number.isFinite(formYear) &&
+      (formYear < MIN_YEAR || formYear > MAX_YEAR);
+    if (outOfRange) {
+      preview = {
+        crop,
+        status: "unknown",
+        targetYear: judgedYear,
+        text: `年が${MIN_YEAR}〜${MAX_YEAR}の範囲にないので、まだ判定できません。`,
+      };
+    } else {
+      const records = plantings
+        .map((p) => {
+          const c = cropLookup(p.cropId);
+          return c ? { familyKey: c.familyKey, year: p.year } : null;
+        })
+        .filter((x) => x !== null);
+      const result = evaluateRotation(
+        /** @type {any[]} */ (records),
+        crop.familyKey,
+        crop.rotationYears,
         judgedYear,
-        currentYear,
-        face: "preview",
-      }),
-    };
+      );
+      preview = {
+        crop,
+        status: result.status,
+        targetYear: judgedYear,
+        text: rotationSentence(result, {
+          cropName: crop.nameJa,
+          judgedYear,
+          currentYear,
+          face: "preview",
+        }),
+      };
+    }
   }
 
   return {

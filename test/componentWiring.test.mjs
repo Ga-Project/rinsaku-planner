@@ -19,7 +19,13 @@
 
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
-import { mkdirSync, readFileSync, writeFileSync, rmSync } from "node:fs";
+import {
+  mkdirSync,
+  readFileSync,
+  writeFileSync,
+  rmSync,
+  readdirSync,
+} from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import ts from "typescript";
@@ -257,7 +263,7 @@ function renderGrid(plantings) {
 
 test("グリッドと編集パネルは、同じ区画に同じ状態名を出す", () => {
   // 片方だけを unknown にすると、スクロールせずに両方見える位置で、同じ区画に
-  // ついて「未設定」と「判定できません」が同時に出る。これは今回の変更が
+  // ついて「未設定」と「判定できず」が同時に出る。これは今回の変更が
   // 潰している欠陥（同じパネルの2面が食い違う）と同型。
   for (const plantings of [
     [],
@@ -317,7 +323,7 @@ test("グリッドと編集パネルは、同じ区画に同じ状態名を出�
 
 test("グリッドのセルは、記録があるのに作物未登録と言わない", () => {
   // 作物が一覧に無いだけで記録はある。真に空の区画と同じ文字列にすると
-  // 「記録なし」と読めてしまう（同じセルのバッジは「判定できません」と出る）。
+  // 「記録なし」と読めてしまう（同じセルのバッジは「判定できず」と出る）。
   const withUnknown = renderGrid([{ cropId: "not-a-crop", year: 2026 }]);
   assert.match(withUnknown, /作物不明（2026）/);
   assert.doesNotMatch(withUnknown, /作物未登録/);
@@ -443,7 +449,7 @@ test("プレビュー面は、返ってきた文と状態をそのまま描く",
 
 test("区画バナーは、バッジと同じ状態をクラスにも出す", () => {
   // バッジの文言だけを見る検査では、バナー側の色・アイコンだけを別状態へ
-  // 差し替える退行が通る（「判定できません」の真下にバナーが緑で並ぶ）。
+  // 差し替える退行が通る（「判定できず」の真下にバナーが緑で並ぶ）。
   let reached = 0;
   for (const plantings of [
     [{ cropId: "tomato", year: 2025 }],
@@ -548,18 +554,31 @@ test("作付けを作れるのは storage の makePlanting だけ", () => {
   // 表示するのに保存されるのは生値、という最も気づきにくい形で戻る。
   // このゲートは描画で踏めない（React のイベントを起こす手段を、依存を増やさずには持てない）ので、
   // 「作付けの id を作る手段が storage の外に無い」ことをソースで固定する。
-  const files = [
-    "app/components/PlannerApp.tsx",
-    "app/components/BedEditor.tsx",
-    "app/components/BedGrid.tsx",
-  ];
+  // id の接頭辞で見ると、別の綴り（newId("pl") 等）で素通りできる。作付けの id を
+  // 作ったかではなく「作付けの形をした値をその場で組み立てたか」を見る。
+  // 「cropId と year を持つ」だけでは広すぎる（props の型宣言や panelVerdicts の
+  // 引数が引っかかる）。作付けを見分けるのは **id を一緒に持つ** こと。
+  // 対象はディレクトリ走査で決める（ファイルを足しても網から漏れない）。
+  // transpile 後ではなくソースを読む — 実際の書き込み経路 PlannerApp.tsx は
+  // 描画検査の transpile 対象に入っておらず、成果物を見ると素通りする。
+  const PLANTING_LITERAL =
+    /\{(?=[^{}]*\bid\s*:)(?=[^{}]*\bcropId\b)(?=[^{}]*\byear\b)[^{}]*\}/;
+  const files = readdirSync("app/components")
+    .filter((f) => f.endsWith(".tsx"))
+    .map((f) => join("app/components", f));
+  assert.ok(files.length > 3, `走査したコンポーネントが少なすぎる: ${files.length}`);
   for (const f of files) {
-    const src = readFileSync(f, "utf8");
+    const literal = readFileSync(f, "utf8").match(PLANTING_LITERAL);
     assert.ok(
-      !/newId\(\s*["']p["']\s*\)/.test(src),
-      `${f} が作付けの id を直に作っている。makePlanting を通すこと`,
+      literal === null,
+      `${f} が作付けを直に組み立てている（makePlanting を通すこと）: ${literal?.[0]}`,
     );
   }
+  // 針の生存確認: この正規表現が作付けリテラルを実際に捕まえること。
+  assert.ok(
+    PLANTING_LITERAL.test('{ id: newId("pl"), cropId, year }'),
+    "作付けリテラルを検出できていない（正規表現が死んでいる）",
+  );
   // 針の生存確認: 追加の経路が実際に makePlanting を呼んでいる。
   const planner = readFileSync("app/components/PlannerApp.tsx", "utf8");
   assert.match(
