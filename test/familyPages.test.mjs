@@ -343,3 +343,27 @@ test("構造化データのパンくずと主題は、画面のパンくずと�
     assert.equal(familyJsonLd(p).about.name, p.name);
   }
 });
+
+test("『Aを作った場所でもBなら続けて植えやすく』の B は0年の野菜で、A と同じ科", () => {
+  // 句の区切り（、。）ごとに名前を取り出し、所属野菜と完全一致で照合する
+  // （「タマネギ」と「ネギ」のような部分一致で通らないように）。
+  const re = /(?:^|[、。])([^、。]+?)を作った場所でも([^、。]+?)なら続けて植えやすく/g;
+  let checked = 0;
+  for (const p of pages) {
+    for (const [, prevName, nextName] of p.directionNote.matchAll(re)) {
+      const prev = p.crops.find((c) => c.name === prevName);
+      const next = p.crops.find((c) => c.name === nextName);
+      assert.ok(prev && next, `${p.name}: 「${prevName}」「${nextName}」が所属野菜と完全一致しない`);
+      assert.equal(next.rotationYears, 0, `${p.name}: 続けて植えやすいと書いた${nextName}は${next.rotationYears}年`);
+      assert.equal(plantAfter(prev.slug, next.slug, 1).status, "ok", `${p.name}: ${prevName}→${nextName} が翌年 ok でない`);
+      checked++;
+    }
+  }
+  assert.ok(checked >= 2, "0年の野菜を含む科の句を検算していない＝空振り");
+});
+
+test("ページ名は科の正式名（見出し・パンくず・構造化データで使う）", () => {
+  for (const p of pages) {
+    assert.equal(p.name, FAMILIES.find((f) => f.key === p.key).nameJa);
+  }
+});
