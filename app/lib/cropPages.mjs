@@ -155,11 +155,15 @@ function familyOf(key) {
  * までに要るあき年数」＝ rotation.mjs が requiredYears に採る値そのもので、短いほど
  * 同じ仲間へ早く戻せる。区画が縛られる年数ではないので、そう書かない。
  * あける年数の小さい順・マスタ順で安定させ、科が偏らないよう1科1件までにする。
+ *
+ * 引数は作物ではなく科のキー。連作は科の単位なので「あとに植えやすい」も科で決まり、
+ * 野菜ページと科ページが同じ規則で同じ並びを出す（規則を書き写すと片方だけ直る）。
+ * @param {string} familyKey
  */
-function followUps(crop) {
+export function followUpsForFamily(familyKey) {
   const seen = new Set();
   return CROPS.map((c, i) => ({ c, i }))
-    .filter(({ c }) => c.familyKey !== crop.familyKey && c.rotationYears <= 1)
+    .filter(({ c }) => c.familyKey !== familyKey && c.rotationYears <= 1)
     .sort((a, b) => a.c.rotationYears - b.c.rotationYears || a.i - b.i)
     .filter(({ c }) => {
       if (seen.has(c.familyKey)) return false;
@@ -203,7 +207,7 @@ export function cropPage(slug) {
   const harvest = monthRangeLabel(crop.harvestMonths);
   const good = toLinks(crop.companionGood);
   const bad = toLinks(crop.companionBad);
-  const next = followUps(crop);
+  const next = followUpsForFamily(crop.familyKey);
 
   // 連作の一文。tier ごとに言い方を変える（0年を「0年あける」と書かない）。
   // 文中に差し込む科名は必ず短縮名を通す。素の familyJa は「ヒガンバナ科（ネギ類）」の

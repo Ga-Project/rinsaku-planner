@@ -16,6 +16,7 @@ import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { cropSlugs, cropUrl, cropIndexUrl } from "../app/lib/cropPages.mjs";
 import { SITE_URL } from "../app/lib/site.mjs";
+import { familySlugs, familyUrl } from "../app/lib/familyPages.mjs";
 import {
   familyReference,
   representativeValueNote,
@@ -43,6 +44,11 @@ function html(relDir) {
 const pages = [
   { dir: ".", url: SITE_URL, label: "トップ" },
   { dir: "yasai", url: cropIndexUrl(), label: "野菜索引" },
+  ...familySlugs().map((key) => ({
+    dir: join("yasai", "ka", key),
+    url: familyUrl(key),
+    label: `科 ${key}`,
+  })),
   ...cropSlugs().map((slug) => ({
     dir: join("yasai", slug),
     url: cropUrl(slug),

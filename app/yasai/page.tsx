@@ -12,10 +12,12 @@ import {
   cropIndexUrl,
   cropSlugs,
   cropsByName,
+  shortFamilyName,
 } from "../lib/cropPages.mjs";
 import { SITE_NAME } from "../lib/reference.mjs";
 import { SITE_URL } from "../lib/site.mjs";
 import { OG_IMAGE } from "../lib/og.mjs";
+import { hasFamilyPage, familyPath } from "../lib/familyPages.mjs";
 
 const TITLE = "野菜別 連作ガイド｜あける年数の一覧";
 const DESCRIPTION =
@@ -187,6 +189,14 @@ export default function CropIndexPage() {
                     </li>
                   ))}
                 </ul>
+                {/* 科の単位で読みたい人へ。1種しかない科にはページが無いので張らない。 */}
+                {hasFamilyPage(f.key) ? (
+                  <p className="crop-back">
+                    <Link href={familyPath(f.key)}>
+                      {`${shortFamilyName(f.nameJa)}の連作をくわしく →`}
+                    </Link>
+                  </p>
+                ) : null}
               </section>
             ))}
           </div>

@@ -7,7 +7,8 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { SiteHeader, SiteFooter, Breadcrumb } from "../../components/SiteChrome";
-import { IconSprout, IconSeedling, IconClock } from "../../components/icons";
+import { IconSeedling, IconClock } from "../../components/icons";
+import { Fact, CropChips, Heading } from "../../components/GuideParts";
 import {
   cropSlugs,
   cropPage,
@@ -16,6 +17,7 @@ import {
 } from "../../lib/cropPages.mjs";
 import { faqJsonLd, SITE_NAME } from "../../lib/reference.mjs";
 import { OG_IMAGE } from "../../lib/og.mjs";
+import { hasFamilyPage, familyPath } from "../../lib/familyPages.mjs";
 
 // static export では全 slug をビルド時に確定させる。マスタに無い slug は 404。
 export function generateStaticParams() {
@@ -51,87 +53,6 @@ export function generateMetadata({ params }: Params): Metadata {
       images: [OG_IMAGE.url],
     },
   };
-}
-
-/**
- * 事実の1行（科・あける年数・時期）。値が空の項目は行ごと出さない。
- * 値は必ず文字列で受け取る: JSX を受けると常に truthy になってガードが死ぬ
- * （空になり得るのは時期の2行だけなので、そこでガードが効かないと意味が無い）。
- */
-function Fact({
-  label,
-  value,
-  icon,
-  className,
-}: {
-  label: string;
-  value: string;
-  icon?: React.ReactNode;
-  className?: string;
-}) {
-  if (!value) return null;
-  return (
-    <div className="crop-fact">
-      <dt>{label}</dt>
-      <dd>
-        <span className={className}>
-          {icon}
-          {value}
-        </span>
-      </dd>
-    </div>
-  );
-}
-
-/**
- * 野菜名の並び。マスタにある野菜だけリンクにする（花・ハーブ類はテキストのまま）。
- *
- * mark は「勧めている並び」と「間をあけたい並び」を、チップ単体を見ただけで
- * 区別するための形の符号。1ページに4つの並びがあり、うち2つは避ける側なので、
- * 見出しから離れて読み始めた人には局所的な手がかりが要る。
- * 形は節見出しの ○ / ◇ と同じ語彙にそろえ、色には意味を持たせない。
- * 記号は装飾なので読み上げには載せない（意味は見出しと aria-labelledby が担保）。
- */
-function CropChips({
-  items,
-  mark,
-}: {
-  items: { name: string; slug?: string; yearsLabel?: string }[];
-  mark: "good" | "avoid";
-}) {
-  return (
-    <ul className={`crop-chips is-${mark}`}>
-      {items.map((c) => (
-        <li key={c.name}>
-          {c.slug ? (
-            <Link className="crop-chip" href={`/yasai/${c.slug}/`}>
-              <span className="crop-chip-name">{c.name}</span>
-              {c.yearsLabel ? (
-                <span className="crop-chip-sub">{c.yearsLabel}</span>
-              ) : null}
-            </Link>
-          ) : (
-            <span className="crop-chip is-plain">
-              <span className="crop-chip-name">{c.name}</span>
-            </span>
-          )}
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-function Heading({ id, children }: { id: string; children: string }) {
-  return (
-    <h2 id={id}>
-      <span className="with-marker">
-        <span className="section-marker" aria-hidden="true">
-          <IconSprout />
-        </span>
-        {children}
-      </span>
-    </h2>
-  );
 }
 
 export default function CropDetailPage({ params }: Params) {
@@ -237,6 +158,15 @@ export default function CropDetailPage({ params }: Params) {
                   {`この一覧に載っている${page.familyInline}の野菜は${page.name}だけです。`}
                 </p>
               )}
+              {/* 科の単位で探す人の受け皿へ。1種しかない科にはページが無いので張らない
+                  （張ると 404 に落ちる）。 */}
+              {hasFamilyPage(page.familyKey) ? (
+                <p className="crop-back">
+                  <Link href={familyPath(page.familyKey)}>
+                    {`${page.familyInline}の野菜ごとの年数を一覧で見る →`}
+                  </Link>
+                </p>
+              ) : null}
             </div>
           </section>
 
