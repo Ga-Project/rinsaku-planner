@@ -45,5 +45,11 @@ auditConfig:
     - GHSA-f88m-g3jw-g9cj   # sharp
     - GHSA-rgj7-g3m4-5g8c   # sharp/libheif
 
+# strictDepBuilds: false
+#   許可していない依存のビルドスクリプトを、install の hard-fail にせず無視する。
+#   依存が増えて未許可のビルドが1つ現れただけで standalone install が止まるのを防ぐ
+#   （allowBuilds には必要なものだけを載せる方針はそのまま）。
+strictDepBuilds: false
+
 allowBuilds:
   unrs-resolver: true
