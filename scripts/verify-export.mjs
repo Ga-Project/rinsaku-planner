@@ -14,9 +14,10 @@
 // 使い方: node scripts/verify-export.mjs <outDir> [basePath]
 import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
-import { cropSlugs, cropUrl, cropIndexUrl } from "../app/lib/cropPages.mjs";
+import { cropSlugs, cropUrl, cropIndexUrl, cropPage } from "../app/lib/cropPages.mjs";
 import { SITE_URL } from "../app/lib/site.mjs";
-import { familySlugs, familyUrl } from "../app/lib/familyPages.mjs";
+import { familySlugs, familyUrl, familyPage, familyPath } from "../app/lib/familyPages.mjs";
+import { CROPS } from "../app/lib/crops.mjs";
 import {
   familyReference,
   representativeValueNote,
@@ -30,6 +31,16 @@ const basePath = (process.argv[3] ?? process.env.BASE_PATH ?? "").replace(
 
 const failures = [];
 const fail = (msg) => failures.push(msg);
+
+/** HTML 実体参照を戻す（Next は属性値・本文の & < > " ' を実体化して書き出す）。 */
+function decodeEntities(t) {
+  return t
+    .replace(/&quot;/g, '"')
+    .replace(/&#x27;|&#39;/g, "'")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&amp;/g, "&");
+}
 
 /** out/ 内の HTML を読む。無ければそれ自体が失敗。 */
 function html(relDir) {
@@ -48,11 +59,13 @@ const pages = [
     dir: join("yasai", "ka", key),
     url: familyUrl(key),
     label: `科 ${key}`,
+    data: familyPage(key),
   })),
   ...cropSlugs().map((slug) => ({
     dir: join("yasai", slug),
     url: cropUrl(slug),
     label: `野菜 ${slug}`,
+    data: cropPage(slug),
   })),
 ];
 
@@ -73,6 +86,40 @@ for (const p of pages) {
   const ogUrl = s.match(/property="og:url" content="([^"]+)"/)?.[1];
   if (ogUrl !== p.url) {
     fail(`${p.label}: og:url が ${ogUrl} （期待 ${p.url}）`);
+  }
+
+  // 構造化データ: 画面と同じ事実だけを持つか。ページ側で JSON-LD だけを書き換えても
+  // lib のテストは反応しないので、書き出した HTML の ld+json を読んで突き合わせる。
+  if (p.data) {
+    const blocks = [...s.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)].map(
+      (m) => JSON.parse(m[1]),
+    );
+    const byType = (t) => blocks.find((b) => b["@type"] === t);
+    const article = byType("Article");
+    const crumbs = byType("BreadcrumbList");
+    const faq = byType("FAQPage");
+    const metaDesc = s.match(/<meta name="description" content="([^"]*)"/)?.[1];
+    if (!article) fail(`${p.label}: Article の構造化データが無い`);
+    else {
+      if (article.description !== p.data.description) fail(`${p.label}: Article.description が本文と違う`);
+      if (metaDesc !== undefined && decodeEntities(metaDesc) !== article.description) {
+        fail(`${p.label}: meta description と Article.description が違う`);
+      }
+      if (article.mainEntityOfPage?.["@id"] !== p.url) fail(`${p.label}: Article の @id が canonical と違う`);
+      if (article.headline !== p.data.title) fail(`${p.label}: Article.headline がタイトルと違う`);
+    }
+    if (!crumbs || crumbs.itemListElement?.at(-1)?.item !== p.url) {
+      fail(`${p.label}: パンくずの末尾が canonical と違う`);
+    }
+    const expectedFaq = p.data.faq.map((f) => [f.q, f.a]);
+    const actualFaq = (faq?.mainEntity ?? []).map((q) => [q.name, q.acceptedAnswer?.text]);
+    if (JSON.stringify(actualFaq) !== JSON.stringify(expectedFaq)) {
+      fail(`${p.label}: FAQPage が画面の FAQ と違う`);
+    }
+    const plain = decodeEntities(s);
+    for (const [q, a] of expectedFaq) {
+      if (!plain.includes(q) || !plain.includes(a)) fail(`${p.label}: FAQ「${q}」が画面に描画されていない`);
+    }
   }
 
   // basePath: 内部リンクは必ず basePath 配下。素の href="/" が1つでもあれば製品の外へ出る
@@ -106,7 +153,7 @@ if (!existsSync(notFound)) {
 // （マスタを直せば期待値も追従する）。列見出しだけは画面固有の文言なので
 // 直書きで照合する。
 {
-  const top = html(".");
+  const top = html(".") ?? "";
   const fams = familyReference();
   const labels = [...new Set(fams.map((f) => f.yearsVaryLabel).filter(Boolean))];
   if (labels.length === 0) {
@@ -123,6 +170,21 @@ if (!existsSync(notFound)) {
   }
   if (!top.includes("科の目安（代表値）")) {
     fail("早見表: 列見出しが「代表値」と名乗っていない");
+  }
+}
+
+// 科ページへの導線: 索引と、所属野菜のページから張られているか。ページを足しても
+// 入口が無ければ誰も辿り着かないので、リンクの有無を書き出しで確かめる。
+{
+  const bp = basePath;
+  const index = html("yasai") ?? "";
+  for (const key of familySlugs()) {
+    const href = `href="${bp}${familyPath(key)}"`;
+    if (!index.includes(href)) fail(`野菜索引: 科ページ ${key} へのリンクが無い`);
+    for (const c of CROPS.filter((x) => x.familyKey === key)) {
+      const s = html(join("yasai", c.id)) ?? "";
+      if (!s.includes(href)) fail(`野菜 ${c.id}: 科ページ ${key} へのリンクが無い`);
+    }
   }
 }
 

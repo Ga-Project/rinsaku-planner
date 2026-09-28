@@ -10,7 +10,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { CROPS, FAMILIES } from "../app/lib/crops.mjs";
 import { bedStatus } from "../app/lib/rotation.mjs";
-import { rotationYearsLabel } from "../app/lib/reference.mjs";
+import { rotationTier, rotationYearsLabel } from "../app/lib/reference.mjs";
 import { cropSlugs, cropPage, CROP_SECTION } from "../app/lib/cropPages.mjs";
 import {
   FAMILY_SECTION,
@@ -258,5 +258,88 @@ test("ほかの科への導線は自分を含まず、ページのある科だ�
     assert.ok(!o.includes(p.key));
     assert.equal(o.length, keys.length - 1);
     for (const k of o) assert.ok(hasFamilyPage(k));
+  }
+});
+
+// ---- 独立レビュー（退行注入）で生き残った変更を落とすための検査 ----
+
+test("年数の決まり方の文は、どの句でも『植える側の野菜』とその年数を名指しする", () => {
+  // 「Aを作った場所にBを植えるなら（要るのは）Cのn年」を全部拾い、C が B で n が B の年数かを見る。
+  // 文面の並びや言い回しではなく、句が主張している事実（誰の何年か）を検算する。
+  const re = /([^、。]+?)を作った場所に([^、。]+?)を植えるなら(?:要るのは)?([^、。]+?)の(\d+)年/g;
+  let checked = 0;
+  for (const p of pages) {
+    if (!p.directionNote) continue;
+    const found = [...p.directionNote.matchAll(re)];
+    assert.ok(found.length > 0, `${p.name}: 年数の句が見つからない`);
+    for (const [, prevName, nextName, whoseName, years] of found) {
+      const prev = p.crops.find((c) => c.name === prevName.replace(/^.*?[。、]/, ""));
+      const next = p.crops.find((c) => c.name === nextName);
+      assert.ok(next, `${p.name}: 植える側「${nextName}」が所属野菜に無い`);
+      assert.equal(whoseName, nextName, `${p.name}: 植える側は${nextName}なのに${whoseName}の年数を挙げている`);
+      assert.equal(Number(years), next.rotationYears, `${p.name}: ${nextName}の年数`);
+      if (prev) {
+        assert.equal(plantAfter(prev.slug, next.slug, 1).requiredYears, Number(years), `${p.name}: 判定と不一致`);
+      }
+      checked++;
+    }
+  }
+  assert.ok(checked >= 5, "検算した句が少なすぎる＝正規表現が空振りしている");
+});
+
+test("文中の科名は短縮名（補足の括弧を持つ正式名は見出し・パンくず・h1 だけ）", () => {
+  const withNote = pages.filter((p) => p.name !== p.nameInline);
+  assert.ok(withNote.length > 0, "補足の括弧を持つ科が無い＝検査が空振りしている");
+  for (const p of withNote) {
+    const texts = [p.title, p.description, p.rotationLine, p.directionNote, p.headingCrops, p.leadCrops, p.headingFollowUps, p.leadFollowUps, p.headingFaq, ...p.faq.flatMap((q) => [q.q, q.a])];
+    for (const t of texts) assert.ok(!t.includes(p.name), `${p.name}: 文中に正式名 ${t}`);
+  }
+});
+
+test("FAQ の年数の答えは、所属野菜すべての年数を名指しする", () => {
+  for (const p of pages) {
+    if (p.maxYears === 0) continue;
+    const a = p.faq[0].a;
+    for (const c of p.crops) {
+      assert.ok(a.includes(`${c.name}は${rotationYearsLabel(c.rotationYears)}`), `${p.name}: ${c.name} の年数が答えに無い`);
+    }
+  }
+});
+
+test("見出しの重さは、科で最も長い野菜の年数で決まる", () => {
+  for (const p of pages) {
+    const max = Math.max(...membersCounted(p.key).map((c) => c.rotationYears));
+    assert.equal(p.tier, rotationTier(max), p.name);
+  }
+});
+
+test("あいだに植えやすい野菜は、あき年数の短い順・同点はマスタ順で、FAQ はその先頭から挙げる", () => {
+  const order = (slug) => CROPS.findIndex((c) => c.id === slug);
+  for (const p of pages) {
+    for (let i = 1; i < p.followUps.length; i++) {
+      const a = p.followUps[i - 1];
+      const b = p.followUps[i];
+      assert.ok(
+        a.rotationYears < b.rotationYears || (a.rotationYears === b.rotationYears && order(a.slug) < order(b.slug)),
+        `${p.name}: ${a.name} と ${b.name} の並び`,
+      );
+    }
+    const listed = p.followUps.slice(0, 4).map((c) => `${c.name}（${c.familyJa}）`).join("・");
+    assert.ok(p.faq[1].a.includes(listed), `${p.name}: FAQ の列挙が画面の一覧の先頭と違う`);
+  }
+});
+
+test("構造化データのパンくずと主題は、画面のパンくずと見出しと同じ", () => {
+  for (const p of pages) {
+    const items = familyBreadcrumbJsonLd(p).itemListElement;
+    assert.deepEqual(
+      items.map((x) => [x.name, x.item]),
+      [
+        ["畑めぐり", SITE_URL],
+        ["野菜別 連作ガイド", `${SITE_URL}${CROP_SECTION}/`],
+        [p.name, p.url],
+      ],
+    );
+    assert.equal(familyJsonLd(p).about.name, p.name);
   }
 });
