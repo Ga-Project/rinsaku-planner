@@ -14,7 +14,8 @@
 // 使い方: node scripts/verify-export.mjs <outDir> [basePath]
 import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
-import { cropSlugs, cropUrl, cropIndexUrl, cropPage } from "../app/lib/cropPages.mjs";
+import { cropSlugs, cropUrl, cropIndexUrl, cropPage, shortFamilyName } from "../app/lib/cropPages.mjs";
+import { FAMILIES } from "../app/lib/crops.mjs";
 import { SITE_URL } from "../app/lib/site.mjs";
 import { familySlugs, familyUrl, familyPage, familyPath } from "../app/lib/familyPages.mjs";
 import { CROPS } from "../app/lib/crops.mjs";
@@ -281,6 +282,44 @@ for (const key of familySlugs()) {
       const t = textOf(note);
       const needs = [longest[0].nameJa, shortest[0].nameJa, `${max}年`, ...(min > 0 ? [`${min}年`] : [])];
       for (const n of needs) if (!t.includes(n)) fail(`${label}: 「年数の決まり方」に「${n}」が無い（${t}）`);
+      // 名前と年数が含まれるだけでは、作る側と植える側を入れ替えた文（向きの逆転）が通る。
+      // 句ごとに「誰の何年か」を取り出し、年数が植える側の野菜のものかを CROPS で検算する。
+      const byName = new Map(members.map((c) => [c.nameJa, c]));
+      const yearsClauses = [
+        ...t.matchAll(/([^、。]+?)を作った場所に([^、。]+?)を植えるなら(?:要るのは)?([^、。]+?)の(\d+)年/g),
+      ];
+      for (const [, made, planted, whose, n] of yearsClauses) {
+        const next = byName.get(planted);
+        if (!byName.has(made) || !next) {
+          fail(`${label}: 「年数の決まり方」の句の野菜が所属野菜に無い（${made} → ${planted}）`);
+        } else if (whose !== planted || Number(n) !== next.rotationYears) {
+          fail(`${label}: 「年数の決まり方」が植える側（${planted}・${next.rotationYears}年）でなく「${whose}の${n}年」を挙げている`);
+        }
+      }
+      const zeroClauses = [...t.matchAll(/([^、。]+?)を作った場所でも([^、。]+?)なら続けて植えやすく/g)];
+      for (const [, made, planted] of zeroClauses) {
+        if (!byName.has(made) || byName.get(planted)?.rotationYears !== 0) {
+          fail(`${label}: 「続けて植えやすい」と言う側（${planted}）が、あき年数0の所属野菜でない`);
+        }
+      }
+      const wantYears = min > 0 ? 2 : 1;
+      if (yearsClauses.length !== wantYears || zeroClauses.length !== (min > 0 ? 0 : 1)) {
+        fail(`${label}: 「年数の決まり方」の句の数が想定と違う（年数の句 ${yearsClauses.length}・続けて植えやすいの句 ${zeroClauses.length}）`);
+      }
+    }
+  }
+  // 正しい幅を書いた文の横に「ナス科はどれも4年」を足されても上の照合は通る。年数が割れる科では、
+  // 本文のどこでも科を主語に1つの年数で言い切らせない（テストの禁止形と同じ形を書き出しに当てる）。
+  if (min !== max) {
+    const fam = shortFamilyName(FAMILIES.find((f) => f.key === key).nameJa);
+    const main = textOf(s.slice(s.indexOf("<main"), s.indexOf("</main>")));
+    const banned = [
+      new RegExp(`${fam}(?:の野菜)?は(?:どれも|すべて|一律に?)?、?\\d+年`),
+      new RegExp(`${fam}を最後に作ってから、?\\d+年`),
+    ];
+    for (const re of banned) {
+      const hit = main.match(re);
+      if (hit) fail(`${label}: 年数が割れる科なのに1つの年数で言い切っている（「${hit[0]}」）`);
     }
   }
   const membersSec = sectionOf(s, "members-h");
