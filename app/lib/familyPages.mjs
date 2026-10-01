@@ -114,13 +114,20 @@ export function familyPage(key) {
       yearsLabel: rotationYearsLabel(c.rotationYears),
     }));
 
-  const examples = joinNames(
-    members.slice(0, EXAMPLE_LIMIT).map((c) => c.nameJa),
-    members.length,
-  );
   // 最長・最短の野菜（マスタ順で先頭）。年数がどちらの野菜で決まるかの実例に使う。
   const longest = crops.filter((c) => c.rotationYears === max);
   const shortest = crops.filter((c) => c.rotationYears === min);
+  // 例示には幅の両端（最長・最短）を必ず入れる。マスタ順の先頭だけを挙げると、
+  // 「レタス・サニーレタス・シュンギクなど…1〜5年」のように上限を決めている野菜
+  // （ゴボウ）が例から消え、例に挙げた野菜に最大の年数が要ると読める。
+  const exampleNames = [
+    ...new Set([
+      longest[0].name,
+      shortest[0].name,
+      ...members.map((c) => c.nameJa),
+    ]),
+  ].slice(0, EXAMPLE_LIMIT);
+  const examples = joinNames(exampleNames, members.length);
   const zeroNames = shortest.map((c) => c.name).join("・");
   const longestNames = longest.map((c) => c.name).join("・");
 
@@ -140,7 +147,7 @@ export function familyPage(key) {
         ? `${fam}の野菜（${examples}）を植えるには、その場所で${fam}を最後に作ってから${max}年あいているのが目安です。`
         : kind === "range"
           ? `${fam}の野菜（${examples}）を植えるには、その場所で${fam}を最後に作ってから、植える野菜ごとに${min}〜${max}年あいているのが目安です。`
-          : `${fam}の野菜（${examples}）は、植える野菜によって必要なあき年数が違います。その場所で${fam}を最後に作ってから、長いものでは${max}年（${longestNames}）あいているのが目安で、${zeroNames}は続けて植えやすい野菜です。`;
+          : `${fam}の野菜（${examples}）は、植える野菜によって必要なあき年数が違います。その場所で${fam}を最後に作ってから、長いもの${max <= 1 ? "でも" : "では"}${max}年（${longestNames}）あいているのが目安で、${zeroNames}は続けて植えやすい野菜です。`;
 
   // 年数は「これから植える野菜」の値で決まる、という向きを実例で示す。
   // 野菜ごとに値が割れる科でだけ出す（割れない科では言う必要が無い）。
@@ -157,7 +164,7 @@ export function familyPage(key) {
 
   const description =
     `${rotationLine}` +
-    `${fam}の野菜ごとに要るあき年数と、あいだに植えやすい野菜をまとめました。登録不要で区画の作付け計画もそのまま作れます。`;
+    `${fam}の野菜ごとに要るあき年数と、あとに植えやすい野菜をまとめました。登録不要で区画の作付け計画もそのまま作れます。`;
 
   // 「トマトは4年、ジャガイモは3年、ネギは続けて植えやすい」。0年は状態で言う。
   const listPhrase = crops.map((c) => `${c.name}は${c.yearsLabel}`).join("、");
@@ -205,10 +212,10 @@ export function familyPage(key) {
     followUps,
     headingCrops: `${fam}の野菜と、植えるまでにあけたい年数`,
     leadCrops: `年数は、その野菜を植えるとき、同じ場所で${fam}を最後に作ってから要るあき年数です。野菜の名前から、それぞれの詳しいページへ進めます。`,
-    headingFollowUps: `${fam}のあいだに植えやすい野菜`,
+    headingFollowUps: `${fam}のあとに植えやすい野菜`,
     leadFollowUps: `${fam}以外の科なら、${fam}の記録は連作にあたりません。なかでも次の野菜は、それ自身をまた植えるまでのあき年数が短いものです。`,
     headingFaq: `${fam}の連作についてよくある質問`,
-    title: `${fam}の連作｜野菜ごとにあける年数と、あいだに植える野菜`,
+    title: `${fam}の連作｜野菜ごとにあける年数と、あとに植える野菜`,
     description,
     url: familyUrl(key),
     faq,
@@ -222,7 +229,7 @@ export function familyPage(key) {
 export function otherFamilies(key) {
   return familySlugs()
     .filter((k) => k !== key)
-    .map((k) => ({ key: k, name: familyPage(k).name }));
+    .map((k) => ({ key: k, name: FAMILIES.find((f) => f.key === k).nameJa }));
 }
 
 /** 科ページの構造化データ。画面に出している事実だけを渡す。 */

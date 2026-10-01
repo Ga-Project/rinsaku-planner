@@ -174,7 +174,7 @@ export default function FamilyPage({ params }: Params) {
           <section className="crop-section no-print" aria-labelledby="others-h">
             <div className="container container-narrow">
               <Heading id="others-h">ほかの科の連作ガイド</Heading>
-              <nav className="crop-jump" aria-labelledby="others-h">
+              <nav className="crop-jump" aria-label="ほかの科のページ">
                 <ul>
                   {others.map((f: { key: string; name: string }) => (
                     <li key={f.key}>

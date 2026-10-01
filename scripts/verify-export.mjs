@@ -21,7 +21,9 @@ import { CROPS } from "../app/lib/crops.mjs";
 import {
   familyReference,
   representativeValueNote,
+  rotationYearsLabel,
 } from "../app/lib/reference.mjs";
+import { OG_IMAGE } from "../app/lib/og.mjs";
 
 const outDir = process.argv[2] ?? "out";
 const basePath = (process.argv[3] ?? process.env.BASE_PATH ?? "").replace(
@@ -31,6 +33,45 @@ const basePath = (process.argv[3] ?? process.env.BASE_PATH ?? "").replace(
 
 const failures = [];
 const fail = (msg) => failures.push(msg);
+
+// 期待URL（SITE_URL）は環境変数 BASE_PATH から、リンクの照合は引数の basePath から作る。
+// 片方だけ渡すと、正しい成果物でも全ページが偽の失敗になる（逆に両方が同じ誤りなら
+// 検査が素通りする）。食い違いはここで止めて、どちらを直すべきかを言う。
+{
+  const envBase = (process.env.BASE_PATH ?? "").replace(/\/+$/, "");
+  if (envBase !== basePath) {
+    console.error(
+      `basePath の指定が食い違っています: 引数 "${basePath}" / 環境変数 BASE_PATH "${envBase}"。` +
+        `ビルドと同じ BASE_PATH を環境変数でも渡してください（例: BASE_PATH=${basePath || "/rinsaku-planner"} node scripts/verify-export.mjs ${outDir} ${basePath}）。`,
+    );
+    process.exit(2);
+  }
+}
+
+/** OGP 画像の期待URL（metadataBase = SITE_URL 起点で解決される）。 */
+const OG_IMAGE_URL = new URL(OG_IMAGE.url, SITE_URL).href;
+
+/** タグとコメントを落とした本文テキスト（React は隣接テキストの間に <!-- --> を挟む）。 */
+function textOf(fragment) {
+  return decodeEntities(fragment.replace(/<!--.*?-->/g, "").replace(/<[^>]+>/g, ""));
+}
+
+/** aria-labelledby="<id>" の section 1つぶんの HTML。無ければ null。 */
+function sectionOf(s, id) {
+  const start = s.indexOf(`aria-labelledby="${id}"`);
+  if (start < 0) return null;
+  const end = s.indexOf("</section>", start);
+  return s.slice(start, end < 0 ? undefined : end);
+}
+
+/** チップの並び [名前, 年数ラベル|null]。 */
+function chipsOf(fragment) {
+  return [
+    ...fragment.matchAll(
+      /class="crop-chip-name">([\s\S]*?)<\/span>(?:<span class="crop-chip-sub">([\s\S]*?)<\/span>)?/g,
+    ),
+  ].map((m) => [textOf(m[1]), m[2] === undefined ? null : textOf(m[2])]);
+}
 
 /** HTML 実体参照を戻す（Next は属性値・本文の & < > " ' を実体化して書き出す）。 */
 function decodeEntities(t) {
@@ -80,8 +121,19 @@ for (const p of pages) {
   }
 
   // OGP: 画像・URL・タイトルがページ固有で残っているか
-  if (!/property="og:image"/.test(s)) {
-    fail(`${p.label}: og:image が無い（layout の images が落ちている）`);
+  // 画像は「タグがあるか」ではなく URL まで見る（basePath 抜けの og.png は 404 になる）。
+  // twitter も openGraph と同じく layout と deep-merge されないので、同じ基準で見る。
+  const ogImage = s.match(/property="og:image" content="([^"]+)"/)?.[1];
+  if (ogImage !== OG_IMAGE_URL) {
+    fail(`${p.label}: og:image が ${ogImage} （期待 ${OG_IMAGE_URL}）`);
+  }
+  const twCard = s.match(/name="twitter:card" content="([^"]+)"/)?.[1];
+  if (twCard !== "summary_large_image") {
+    fail(`${p.label}: twitter:card が ${twCard} （期待 summary_large_image）`);
+  }
+  const twImage = s.match(/name="twitter:image" content="([^"]+)"/)?.[1];
+  if (twImage !== OG_IMAGE_URL) {
+    fail(`${p.label}: twitter:image が ${twImage} （期待 ${OG_IMAGE_URL}）`);
   }
   const ogUrl = s.match(/property="og:url" content="([^"]+)"/)?.[1];
   if (ogUrl !== p.url) {
@@ -102,7 +154,8 @@ for (const p of pages) {
     if (!article) fail(`${p.label}: Article の構造化データが無い`);
     else {
       if (article.description !== p.data.description) fail(`${p.label}: Article.description が本文と違う`);
-      if (metaDesc !== undefined && decodeEntities(metaDesc) !== article.description) {
+      if (metaDesc === undefined) fail(`${p.label}: meta description が無い`);
+      else if (decodeEntities(metaDesc) !== article.description) {
         fail(`${p.label}: meta description と Article.description が違う`);
       }
       if (article.mainEntityOfPage?.["@id"] !== p.url) fail(`${p.label}: Article の @id が canonical と違う`);
@@ -185,6 +238,77 @@ if (!existsSync(notFound)) {
       const s = html(join("yasai", c.id)) ?? "";
       if (!s.includes(href)) fail(`野菜 ${c.id}: 科ページ ${key} へのリンクが無い`);
     }
+  }
+}
+
+// 科ページの本文: 年数の欄・リード文・年数の決まり方・所属野菜の一覧が、所属野菜
+// ごとの値で書かれているか。期待値は familyPage() を経由せず CROPS から数え直す
+// （lib が壊れたとき期待値も一緒に壊れると、ここは何も言わなくなる）。
+// 守りたいのは「科を1つの年数で言い切らない」こと。ナス科ならジャガイモは3年で、
+// 「4年」と言い切ったページは同じ製品の判定と食い違う。
+for (const key of familySlugs()) {
+  const label = `科 ${key}`;
+  const s = html(join("yasai", "ka", key));
+  if (s === null) continue;
+  const members = CROPS.filter((c) => c.familyKey === key);
+  const years = members.map((c) => c.rotationYears);
+  const min = Math.min(...years);
+  const max = Math.max(...years);
+  const longest = members.filter((c) => c.rotationYears === max);
+  const shortest = members.filter((c) => c.rotationYears === min);
+  const expectedYears =
+    max === 0 ? "続けて植えやすい" : min === max ? `${max}年` : min === 0 ? `最長${max}年` : `${min}〜${max}年`;
+
+  const lead = s.slice(s.indexOf('class="crop-lead"'), s.indexOf("</section>", s.indexOf('class="crop-lead"')));
+  if (!s.includes('class="crop-lead"')) {
+    fail(`${label}: 冒頭の節（crop-lead）が無い`);
+    continue;
+  }
+  const yearsCell = lead.match(/<span class="ref-years[^"]*">([\s\S]*?)<\/span>/)?.[1];
+  if (yearsCell === undefined || textOf(yearsCell) !== expectedYears) {
+    fail(`${label}: 年数の欄が「${yearsCell === undefined ? "（無し）" : textOf(yearsCell)}」（期待「${expectedYears}」）`);
+  }
+  const leadText = textOf(lead.match(/<p class="ref-lead">([\s\S]*?)<\/p>/)?.[1] ?? "");
+  const leadNeeds =
+    max === 0 ? [] : min === max ? [`${max}年`] : min === 0 ? [`${max}年`, ...shortest.map((c) => c.nameJa)] : [`${min}〜${max}年`];
+  for (const n of leadNeeds) {
+    if (!leadText.includes(n)) fail(`${label}: リード文に「${n}」が無い（${leadText}）`);
+  }
+  const note = lead.match(/<p class="crop-note">([\s\S]*?)<\/p>/)?.[1];
+  if (min !== max && max > 0) {
+    if (note === undefined) fail(`${label}: 野菜ごとに年数が割れるのに「年数の決まり方」が無い`);
+    else {
+      const t = textOf(note);
+      const needs = [longest[0].nameJa, shortest[0].nameJa, `${max}年`, ...(min > 0 ? [`${min}年`] : [])];
+      for (const n of needs) if (!t.includes(n)) fail(`${label}: 「年数の決まり方」に「${n}」が無い（${t}）`);
+    }
+  }
+  const membersSec = sectionOf(s, "members-h");
+  if (membersSec === null) fail(`${label}: 所属野菜の節が無い`);
+  else {
+    const got = chipsOf(membersSec);
+    const want = members.map((c) => [c.nameJa, rotationYearsLabel(c.rotationYears)]);
+    const key2 = (xs) => JSON.stringify([...xs].map((x) => x.join("|")).sort());
+    if (key2(got) !== key2(want)) {
+      fail(`${label}: 所属野菜の一覧が作物マスタと違う（画面 ${got.map((x) => x.join(":")).join(", ")}）`);
+    }
+  }
+}
+
+// 野菜ページの年数の欄も同じ型で壊れうる（科の代表値に描き替える）ので、作物ごとの値と照合する。
+for (const c of CROPS) {
+  const s = html(join("yasai", c.id));
+  if (s === null) continue;
+  const cell = s.match(/<span class="ref-years[^"]*">([\s\S]*?)<\/span>/)?.[1];
+  const want = rotationYearsLabel(c.rotationYears);
+  if (cell === undefined || textOf(cell) !== want) {
+    fail(`野菜 ${c.id}: 年数の欄が「${cell === undefined ? "（無し）" : textOf(cell)}」（期待「${want}」）`);
+  }
+  // 科ページへのリンクは自分の科を指す1本だけ（科ページの無い科なら0本）。
+  const famLinks = [...s.matchAll(/href="([^"]*\/yasai\/ka\/[^"]*)"/g)].map((m) => m[1]);
+  const own = familySlugs().includes(c.familyKey) ? [`${basePath}${familyPath(c.familyKey)}`] : [];
+  if (JSON.stringify(famLinks) !== JSON.stringify(own)) {
+    fail(`野菜 ${c.id}: 科ページへのリンクが ${JSON.stringify(famLinks)}（期待 ${JSON.stringify(own)}）`);
   }
 }
 

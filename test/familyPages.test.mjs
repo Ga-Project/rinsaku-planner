@@ -204,7 +204,7 @@ test("0年を『0年』と書かない", () => {
   }
 });
 
-test("あいだに植えやすい野菜は別の科で、翌年に植えても連作にあたらない", () => {
+test("あとに植えやすい野菜は別の科で、翌年に植えても連作にあたらない", () => {
   for (const p of pages) {
     assert.ok(p.followUps.length > 0, p.name);
     for (const f of p.followUps) {
@@ -273,14 +273,14 @@ test("年数の決まり方の文は、どの句でも『植える側の野菜�
     const found = [...p.directionNote.matchAll(re)];
     assert.ok(found.length > 0, `${p.name}: 年数の句が見つからない`);
     for (const [, prevName, nextName, whoseName, years] of found) {
-      const prev = p.crops.find((c) => c.name === prevName.replace(/^.*?[。、]/, ""));
+      const prev = p.crops.find((c) => c.name === prevName);
       const next = p.crops.find((c) => c.name === nextName);
       assert.ok(next, `${p.name}: 植える側「${nextName}」が所属野菜に無い`);
       assert.equal(whoseName, nextName, `${p.name}: 植える側は${nextName}なのに${whoseName}の年数を挙げている`);
       assert.equal(Number(years), next.rotationYears, `${p.name}: ${nextName}の年数`);
-      if (prev) {
-        assert.equal(plantAfter(prev.slug, next.slug, 1).requiredYears, Number(years), `${p.name}: 判定と不一致`);
-      }
+      // 作った側が所属野菜に見つからないと判定との照合が黙って飛ぶので、見つかることを先に固定する。
+      assert.ok(prev, `${p.name}: 作った側「${prevName}」が所属野菜に無い`);
+      assert.equal(plantAfter(prev.slug, next.slug, 1).requiredYears, Number(years), `${p.name}: 判定と不一致`);
       checked++;
     }
   }
@@ -313,7 +313,7 @@ test("見出しの重さは、科で最も長い野菜の年数で決まる", ()
   }
 });
 
-test("あいだに植えやすい野菜は、あき年数の短い順・同点はマスタ順で、FAQ はその先頭から挙げる", () => {
+test("あとに植えやすい野菜は、あき年数の短い順・同点はマスタ順で、FAQ はその先頭から挙げる", () => {
   const order = (slug) => CROPS.findIndex((c) => c.id === slug);
   for (const p of pages) {
     for (let i = 1; i < p.followUps.length; i++) {
