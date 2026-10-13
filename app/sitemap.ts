@@ -1,7 +1,7 @@
 import type { MetadataRoute } from "next";
 import { SITE_URL } from "./lib/site.mjs";
 import { cropSlugs, cropUrl, cropIndexUrl } from "./lib/cropPages.mjs";
-import { familySlugs, familyUrl } from "./lib/familyPages.mjs";
+import { familySlugs, familyUrl, familyIndexUrl } from "./lib/familyPages.mjs";
 
 // output:export では sitemap ルートを静的化する必要がある（未指定だとビルドが落ちる）。
 export const dynamic = "force-static";
@@ -14,6 +14,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
   return [
     { url: SITE_URL, changeFrequency: "monthly", priority: 1 },
     { url: cropIndexUrl(), changeFrequency: "monthly", priority: 0.8 },
+    { url: familyIndexUrl(), changeFrequency: "monthly", priority: 0.7 },
     ...familySlugs().map((key: string) => ({
       url: familyUrl(key),
       changeFrequency: "yearly" as const,

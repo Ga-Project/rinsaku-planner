@@ -22,6 +22,12 @@ import {
   familyJsonLd,
   familyBreadcrumbJsonLd,
   otherFamilies,
+  familyIndex,
+  familyIndexPath,
+  familyIndexUrl,
+  familyIndexBreadcrumbJsonLd,
+  DESCRIPTION_MAX,
+  FAMILY_INDEX_LABEL,
 } from "../app/lib/familyPages.mjs";
 import { SITE_URL } from "../app/lib/site.mjs";
 
@@ -337,6 +343,7 @@ test("構造化データのパンくずと主題は、画面のパンくずと�
       [
         ["畑めぐり", SITE_URL],
         ["野菜別 連作ガイド", `${SITE_URL}${CROP_SECTION}/`],
+        [FAMILY_INDEX_LABEL, familyIndexUrl()],
         [p.name, p.url],
       ],
     );
@@ -365,5 +372,62 @@ test("『Aを作った場所でもBなら続けて植えやすく』の B は0�
 test("ページ名は科の正式名（見出し・パンくず・構造化データで使う）", () => {
   for (const p of pages) {
     assert.equal(p.name, FAMILIES.find((f) => f.key === p.key).nameJa);
+  }
+});
+
+test("description は検索結果で切れない長さで、構造化データと同じ値", () => {
+  for (const p of pages) {
+    const n = [...p.description].length;
+    assert.ok(n <= DESCRIPTION_MAX, `${p.name}: description が ${n} 字（上限 ${DESCRIPTION_MAX}）`);
+    assert.ok(n >= 40, `${p.name}: description が短すぎる（${n} 字）`);
+    assert.equal(familyJsonLd(p).description, p.description);
+  }
+});
+
+test("description の年数は所属野菜の値から出ており、科を1つの年数で言い切らない", () => {
+  for (const p of pages) {
+    const years = CROPS.filter((c) => c.familyKey === p.key).map((c) => c.rotationYears);
+    const min = Math.min(...years);
+    const max = Math.max(...years);
+    const nums = [...p.description.matchAll(/(\d+)(?:〜(\d+))?年/g)];
+    for (const m of nums) {
+      assert.ok(Number(m[1]) === min || Number(m[1]) === max, `${p.name}: ${m[0]} は所属野菜の最短・最長でない`);
+      if (m[2]) assert.equal(Number(m[2]), max);
+    }
+    if (min !== max) {
+      assert.ok(!new RegExp(`${p.nameInline}(?:の野菜)?は(?:どれも|すべて|一律に?)?、?\\d+年`).test(p.description));
+    }
+    if (max === 0) assert.ok(!/0年/.test(p.description));
+  }
+});
+
+test("科の索引: ページのある科だけを FAMILIES の順に並べ、各科ページと同じ値を持つ", () => {
+  const idx = familyIndex();
+  assert.deepEqual(idx.families.map((f) => f.key), keys);
+  assert.equal(idx.count, keys.length);
+  assert.equal(idx.url, familyIndexUrl());
+  assert.equal(idx.url, `${SITE_URL}${CROP_SECTION}/${FAMILY_SECTION}/`);
+  assert.equal(familyIndexPath(), `/${CROP_SECTION}/${FAMILY_SECTION}/`);
+  assert.ok([...idx.description].length <= DESCRIPTION_MAX);
+  for (const f of idx.families) {
+    const p = familyPage(f.key);
+    assert.equal(f.yearsLabel, p.yearsLabel);
+    assert.equal(f.tier, p.tier);
+    assert.deepEqual(f.crops, p.crops);
+    assert.ok(idx.description.includes(p.nameInline), `${p.name} が description に無い`);
+  }
+  assert.ok(idx.lead.includes(`全${keys.length}科`));
+});
+
+test("科の索引はパンくずの途中に入り、科ページのパンくずも索引を経由する", () => {
+  const idx = familyIndex();
+  const top = familyIndexBreadcrumbJsonLd(idx);
+  assert.equal(top.itemListElement.at(-1).item, idx.url);
+  assert.equal(top.itemListElement.at(-1).name, FAMILY_INDEX_LABEL);
+  for (const p of pages) {
+    const items = familyBreadcrumbJsonLd(p).itemListElement;
+    assert.deepEqual(items.map((i) => i.position), [1, 2, 3, 4]);
+    assert.equal(items[2].item, idx.url);
+    assert.equal(items[3].item, p.url);
   }
 });

@@ -16,6 +16,8 @@ import {
   familyJsonLd,
   familyBreadcrumbJsonLd,
   otherFamilies,
+  familyIndexPath,
+  FAMILY_INDEX_LABEL,
 } from "../../../lib/familyPages.mjs";
 import { faqJsonLd, SITE_NAME } from "../../../lib/reference.mjs";
 import { OG_IMAGE } from "../../../lib/og.mjs";
@@ -95,6 +97,7 @@ export default function FamilyPage({ params }: Params) {
             trail={[
               { href: "/", label: "畑めぐり" },
               { href: "/yasai/", label: "野菜別 連作ガイド" },
+              { href: familyIndexPath(), label: FAMILY_INDEX_LABEL },
             ]}
             current={page.name}
           />
@@ -184,7 +187,9 @@ export default function FamilyPage({ params }: Params) {
                 </ul>
               </nav>
               <p className="crop-back">
-                <Link href="/yasai/">← 野菜別 連作ガイドの一覧へ</Link>
+                <Link href={familyIndexPath()}>← 科別 連作ガイドの一覧へ</Link>
+                {" ／ "}
+                <Link href="/yasai/">野菜別 連作ガイドの一覧へ</Link>
               </p>
             </div>
           </section>

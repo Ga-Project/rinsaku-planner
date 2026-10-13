@@ -33,6 +33,12 @@ import {
 /** 科ページのURLの根（/yasai/ の下）。ルーティングと sitemap の唯一の出典。 */
 export const FAMILY_SECTION = "ka";
 
+/** description の上限（検索結果で切れない目安）。test が全科でこの値以下を守らせる。 */
+export const DESCRIPTION_MAX = 120;
+
+/** 科の索引のパンくず上の名前（画面と構造化データで同じ文字を使う）。 */
+export const FAMILY_INDEX_LABEL = "科別 連作ガイド";
+
 /** 科ページを作る最小の所属野菜数（1種の科は野菜ページと同じ内容になる）。 */
 const MIN_MEMBERS = 2;
 
@@ -54,6 +60,16 @@ export function familySlugs() {
 /** その科にページがあるか（リンクを張る側が使う。無い科へのリンクは 404 になる）。 */
 export function hasFamilyPage(key) {
   return familySlugs().includes(key);
+}
+
+/** 科ページの索引（/yasai/ka/）のサイト内パス。科ページの階層を1つ上がった先。 */
+export function familyIndexPath() {
+  return `/${CROP_SECTION}/${FAMILY_SECTION}/`;
+}
+
+/** 科ページの索引の公開URL（絶対）。canonical と sitemap で使い回す。 */
+export function familyIndexUrl() {
+  return `${SITE_URL}${CROP_SECTION}/${FAMILY_SECTION}/`;
 }
 
 /** 科ページのサイト内パス（next/link 用。basePath は Next が付ける）。 */
@@ -162,9 +178,18 @@ export function familyPage(key) {
 
   const followUps = followUpsForFamily(key);
 
-  const description =
-    `${rotationLine}` +
-    `${fam}の野菜ごとに要るあき年数と、あとに植えやすい野菜をまとめました。登録不要で区画の作付け計画もそのまま作れます。`;
+  // 検索結果で切れない長さに収める。本文のリード文（rotationLine）は例示と最長・最短の
+  // 野菜名を含み科によっては200字近くになるので、description には使い回さず、同じ
+  // 作物マスタ由来の値（年数の幅・最長の野菜）だけで短く組み直す。
+  const descriptionLead =
+    kind === "none"
+      ? `${fam}の野菜は、${fam}を作った直後でも植えやすいグループです。`
+      : kind === "uniform"
+        ? `${fam}の野菜を植えるまでにあけたい年数は${max}年が目安です。`
+        : kind === "range"
+          ? `${fam}の野菜を植えるまでにあけたい年数は、野菜ごとに${min}〜${max}年が目安です。`
+          : `${fam}の野菜は、植える野菜によってあけたい年数が違い、最長${max}年（${longestNames}）です。`;
+  const description = `${descriptionLead}野菜ごとの年数と、あとに植えやすい野菜をまとめました。登録不要で区画の作付け計画もそのまま作れます。`;
 
   // 「トマトは4年、ジャガイモは3年、ネギは続けて植えやすい」。0年は状態で言う。
   const listPhrase = crops.map((c) => `${c.name}は${c.yearsLabel}`).join("、");
@@ -223,6 +248,50 @@ export function familyPage(key) {
 }
 
 /**
+ * 科ページの索引（/yasai/ka/）。ページのある科だけを FAMILIES の順で並べる。
+ * 年数・野菜は各科ページと同じ familyPage() の値を使うので、索引と科ページが食い違わない。
+ */
+export function familyIndex() {
+  const families = familySlugs().map((key) => familyPage(key));
+  const names = families.map((f) => f.nameInline);
+  const title = "科別 連作ガイド｜科ごとにあける年数の一覧";
+  return {
+    title,
+    heading: FAMILY_INDEX_LABEL,
+    count: families.length,
+    lead: `連作障害は野菜の名前ではなく「科」の単位で起きます。科ごとに、植えるまでにあけたい年数と所属する野菜、あとに植えやすい野菜を読めます。全${families.length}科。`,
+    description: `${names.join("・")}の${families.length}科について、植えるまでにあけたい年数と、あとに植えやすい野菜を科ごとにまとめた一覧です。`,
+    url: familyIndexUrl(),
+    families: families.map((f) => ({
+      key: f.key,
+      name: f.name,
+      count: f.count,
+      tier: f.tier,
+      yearsLabel: f.yearsLabel,
+      crops: f.crops,
+    })),
+  };
+}
+
+/** 科の索引のパンくず。トップ→野菜別ガイド→科別ガイド。 */
+export function familyIndexBreadcrumbJsonLd(index) {
+  return {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: SITE_NAME, item: SITE_URL },
+      {
+        "@type": "ListItem",
+        position: 2,
+        name: "野菜別 連作ガイド",
+        item: cropIndexUrl(),
+      },
+      { "@type": "ListItem", position: 3, name: index.heading, item: index.url },
+    ],
+  };
+}
+
+/**
  * 「ほかの科の連作ガイド」。自分以外で科ページを持つ科を FAMILIES の順で返す。
  * @param {string} key
  */
@@ -259,7 +328,13 @@ export function familyBreadcrumbJsonLd(page) {
         name: "野菜別 連作ガイド",
         item: cropIndexUrl(),
       },
-      { "@type": "ListItem", position: 3, name: page.name, item: page.url },
+      {
+        "@type": "ListItem",
+        position: 3,
+        name: FAMILY_INDEX_LABEL,
+        item: familyIndexUrl(),
+      },
+      { "@type": "ListItem", position: 4, name: page.name, item: page.url },
     ],
   };
 }

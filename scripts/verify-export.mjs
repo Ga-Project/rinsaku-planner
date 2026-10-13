@@ -17,7 +17,16 @@ import { join } from "node:path";
 import { cropSlugs, cropUrl, cropIndexUrl, cropPage, shortFamilyName } from "../app/lib/cropPages.mjs";
 import { FAMILIES } from "../app/lib/crops.mjs";
 import { SITE_URL } from "../app/lib/site.mjs";
-import { familySlugs, familyUrl, familyPage, familyPath } from "../app/lib/familyPages.mjs";
+import {
+  familySlugs,
+  familyUrl,
+  familyPage,
+  familyPath,
+  familyIndex,
+  familyIndexPath,
+  familyIndexUrl,
+  DESCRIPTION_MAX,
+} from "../app/lib/familyPages.mjs";
 import { CROPS } from "../app/lib/crops.mjs";
 import {
   familyReference,
@@ -97,11 +106,14 @@ function html(relDir) {
 const pages = [
   { dir: ".", url: SITE_URL, label: "トップ" },
   { dir: "yasai", url: cropIndexUrl(), label: "野菜索引" },
+  { dir: join("yasai", "ka"), url: familyIndexUrl(), label: "科索引", descMax: DESCRIPTION_MAX },
   ...familySlugs().map((key) => ({
     dir: join("yasai", "ka", key),
     url: familyUrl(key),
     label: `科 ${key}`,
     data: familyPage(key),
+    // 科ページの description の上限（野菜ページは対象外）。
+    descMax: DESCRIPTION_MAX,
   })),
   ...cropSlugs().map((slug) => ({
     dir: join("yasai", slug),
@@ -139,6 +151,17 @@ for (const p of pages) {
   const ogUrl = s.match(/property="og:url" content="([^"]+)"/)?.[1];
   if (ogUrl !== p.url) {
     fail(`${p.label}: og:url が ${ogUrl} （期待 ${p.url}）`);
+  }
+
+  // 検索結果で切れない長さ。lib の test と同じ上限を、書き出した meta そのものに当てる
+  // （meta が無い・上限が決まっていないページは対象外。構造化データの有無とも独立）。
+  if (p.descMax !== undefined) {
+    const d = s.match(/<meta name="description" content="([^"]*)"/)?.[1];
+    if (d === undefined) fail(`${p.label}: meta description が無い`);
+    else {
+      const n = [...decodeEntities(d)].length;
+      if (n > p.descMax) fail(`${p.label}: meta description が ${n} 字（上限 ${p.descMax}）`);
+    }
   }
 
   // 構造化データ: 画面と同じ事実だけを持つか。ページ側で JSON-LD だけを書き換えても
@@ -239,6 +262,37 @@ if (!existsSync(notFound)) {
       const s = html(join("yasai", c.id)) ?? "";
       if (!s.includes(href)) fail(`野菜 ${c.id}: 科ページ ${key} へのリンクが無い`);
     }
+  }
+}
+
+// 科の索引（/yasai/ka/）: URL を1階層削った人の行き止まりをなくす入口。索引が全科ページへ
+// 張り、各科ページと野菜索引が索引へ戻る。片方向でも欠けると行き止まりが戻る。
+// 並びと年数は familyPage() を経由せず CROPS から数え直した値と突き合わせる。
+{
+  const idx = html(join("yasai", "ka")) ?? "";
+  const data = familyIndex();
+  const linked = [...idx.matchAll(/href="([^"]*\/yasai\/ka\/[^"]+)"/g)].map((m) => m[1]);
+  const want = familySlugs().map((k) => `${basePath}${familyPath(k)}`);
+  if (JSON.stringify(linked) !== JSON.stringify(want)) {
+    fail(`科索引: 科ページへのリンクが ${JSON.stringify(linked)}（期待 ${JSON.stringify(want)}）`);
+  }
+  if (!idx.includes(textOf(data.heading))) fail("科索引: 見出しが無い");
+  for (const key of familySlugs()) {
+    const sec = sectionOf(idx, `fam-${key}`);
+    const members = CROPS.filter((c) => c.familyKey === key);
+    if (sec === null) {
+      fail(`科索引: ${key} の節が無い`);
+      continue;
+    }
+    const got = chipsOf(sec).map((x) => x.join("|")).sort();
+    const exp = members.map((c) => `${c.nameJa}|${rotationYearsLabel(c.rotationYears)}`).sort();
+    if (JSON.stringify(got) !== JSON.stringify(exp)) fail(`科索引: ${key} の野菜一覧が作物マスタと違う`);
+    if (!(html(join("yasai", "ka", key)) ?? "").includes(`href="${basePath}${familyIndexPath()}"`)) {
+      fail(`科 ${key}: 科索引へ戻るリンクが無い`);
+    }
+  }
+  if (!(html("yasai") ?? "").includes(`href="${basePath}${familyIndexPath()}"`)) {
+    fail("野菜索引: 科索引へのリンクが無い");
   }
 }
 

@@ -17,7 +17,7 @@ import {
 import { SITE_NAME } from "../lib/reference.mjs";
 import { SITE_URL } from "../lib/site.mjs";
 import { OG_IMAGE } from "../lib/og.mjs";
-import { hasFamilyPage, familyPath } from "../lib/familyPages.mjs";
+import { hasFamilyPage, familyPath, familyIndexPath, FAMILY_INDEX_LABEL } from "../lib/familyPages.mjs";
 
 const TITLE = "野菜別 連作ガイド｜あける年数の一覧";
 const DESCRIPTION =
@@ -143,6 +143,9 @@ export default function CropIndexPage() {
                 科から探す
               </span>
             </h2>
+            <p className="ref-lead">
+              科ごとのページは<Link href={familyIndexPath()}>{FAMILY_INDEX_LABEL}</Link>にまとめています。
+            </p>
             <nav className="crop-jump" aria-label="科へ移動">
               <ul>
                 {families.map((f) => (
