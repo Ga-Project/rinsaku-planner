@@ -1371,7 +1371,8 @@ a.crop-chip:hover {
   margin-bottom: var(--sp-3);
 }
 
-.crop-family-head h2 {
+.crop-family-head h2,
+.crop-family-head h3 {
   margin: 0;
 }
 

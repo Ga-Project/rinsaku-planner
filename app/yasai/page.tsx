@@ -143,9 +143,6 @@ export default function CropIndexPage() {
                 科から探す
               </span>
             </h2>
-            <p className="ref-lead">
-              科ごとのページは<Link href={familyIndexPath()}>{FAMILY_INDEX_LABEL}</Link>にまとめています。
-            </p>
             <nav className="crop-jump" aria-label="科へ移動">
               <ul>
                 {families.map((f) => (
@@ -155,6 +152,10 @@ export default function CropIndexPage() {
                 ))}
               </ul>
             </nav>
+            {/* ページ内の移動（上の科名）とは別に、科ごとの読み物の入口を別ページとして置く。 */}
+            <p className="crop-back">
+              <Link href={familyIndexPath()}>{`科ごとの連作ガイドをまとめて見る（${FAMILY_INDEX_LABEL}）→`}</Link>
+            </p>
           </div>
         </section>
 

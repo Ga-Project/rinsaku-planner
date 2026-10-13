@@ -188,8 +188,9 @@ export default function FamilyPage({ params }: Params) {
               </nav>
               <p className="crop-back">
                 <Link href={familyIndexPath()}>← 科別 連作ガイドの一覧へ</Link>
-                {" ／ "}
-                <Link href="/yasai/">野菜別 連作ガイドの一覧へ</Link>
+              </p>
+              <p className="crop-back">
+                <Link href="/yasai/">← 野菜別 連作ガイドの一覧へ</Link>
               </p>
             </div>
           </section>

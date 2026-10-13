@@ -2,13 +2,13 @@ name: Deploy to GitHub Pages
 
 # 公開前ゲート → ビルド → Pages 公開を1つの workflow で直列化する。
 # secret-scan が落ちたら build は skip され、Pages には何も公開されない。
-# PR では secret-scan / checks / build（書き出しの検査まで）を回し、deploy は main の push のみ
+# PR では secret-scan / checks / build（書き出しの検査まで）を回し、deploy は main の push のみ。
 
 on:
   push:
     branches: [main]
-  # PR でも検査は回す（マージ後に初めて落ちる状態にしない）。
-  # 公開そのもの（build / deploy）は main への push のときだけ実行する。
+  # PR でも検査は回す（マージ後に初めて落ちる状態にしない）。secret-scan / checks / build
+  # （書き出しの検査まで）が対象。公開そのもの（upload / deploy）は main への push のときだけ。
   pull_request:
     branches: [main]
 
@@ -19,7 +19,8 @@ permissions:
 concurrency:
   # PR の検査が main の公開をキャンセルしないよう、ref ごとに分ける。
   group: pages-${{ github.ref }}
-  cancel-in-progress: true
+  # PR の古い run は捨ててよいが、main の公開 run は途中で打ち切らない（連続 push でも完走させる）。
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   # ---------------------------------------------------------------------------
@@ -67,9 +68,6 @@ jobs:
   build:
     name: Build (static export)
     needs: [secret-scan, checks] # 双方の通過が前提。fail 時は skip され公開されない。
-    # PR でも走らせる: build と書き出しの検査（verify-export）が main への push でしか
-    # 走らないと、壊れた書き出しがマージ後に初めて落ちる。公開物の作成（upload）と
-    # deploy は main への push のときだけ。
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -90,6 +88,10 @@ jobs:
       - env:
           BASE_PATH: /rinsaku-planner
         run: node scripts/verify-export.mjs out /rinsaku-planner
+      # 検査そのものの負例: 壊した out/ で verify-export が落ちること（検査が黙って弱くならない）。
+      - env:
+          BASE_PATH: /rinsaku-planner
+        run: node scripts/verify-export-negative.mjs out /rinsaku-planner
       - if: github.event_name == 'push'
         uses: actions/upload-pages-artifact@v3
         with:
@@ -99,7 +101,7 @@ jobs:
     name: Deploy
     needs: build
     # 公開は main への push のときだけ（PR では build の検査までで止まる）。
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
       contents: read

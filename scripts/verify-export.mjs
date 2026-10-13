@@ -14,7 +14,7 @@
 // 使い方: node scripts/verify-export.mjs <outDir> [basePath]
 import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
-import { cropSlugs, cropUrl, cropIndexUrl, cropPage, shortFamilyName } from "../app/lib/cropPages.mjs";
+import { cropSlugs, cropUrl, cropIndexUrl, cropPage, shortFamilyName, DESCRIPTION_MAX } from "../app/lib/cropPages.mjs";
 import { FAMILIES } from "../app/lib/crops.mjs";
 import { SITE_URL } from "../app/lib/site.mjs";
 import {
@@ -22,16 +22,13 @@ import {
   familyUrl,
   familyPage,
   familyPath,
-  familyIndex,
-  familyIndexPath,
-  familyIndexUrl,
-  DESCRIPTION_MAX,
 } from "../app/lib/familyPages.mjs";
 import { CROPS } from "../app/lib/crops.mjs";
 import {
   familyReference,
   representativeValueNote,
   rotationYearsLabel,
+  rotationTier,
 } from "../app/lib/reference.mjs";
 import { OG_IMAGE } from "../app/lib/og.mjs";
 
@@ -106,14 +103,12 @@ function html(relDir) {
 const pages = [
   { dir: ".", url: SITE_URL, label: "トップ" },
   { dir: "yasai", url: cropIndexUrl(), label: "野菜索引" },
-  { dir: join("yasai", "ka"), url: familyIndexUrl(), label: "科索引", descMax: DESCRIPTION_MAX },
+  { dir: join("yasai", "ka"), url: `${SITE_URL}yasai/ka/`, label: "科索引" },
   ...familySlugs().map((key) => ({
     dir: join("yasai", "ka", key),
     url: familyUrl(key),
     label: `科 ${key}`,
     data: familyPage(key),
-    // 科ページの description の上限（野菜ページは対象外）。
-    descMax: DESCRIPTION_MAX,
   })),
   ...cropSlugs().map((slug) => ({
     dir: join("yasai", slug),
@@ -122,6 +117,44 @@ const pages = [
     data: cropPage(slug),
   })),
 ];
+
+// 期待値の定数。lib の関数（familyIndexUrl 等）を経由せず、ここで書き下す。lib が壊れたとき
+// 期待値も一緒に壊れて検査が黙ることを避ける（URL は SITE_URL 起点の固定の形）。
+const INDEX_LABEL = "野菜別 連作ガイド";
+const FAMILY_INDEX_LABEL = "科別 連作ガイド";
+const FAMILY_INDEX_TITLE = "科別 連作ガイド｜科ごとにあける年数の一覧";
+const familyIndexHref = `${SITE_URL}yasai/ka/`;
+const familyHref = (key) => `${SITE_URL}yasai/ka/${key}/`;
+const toHref = (abs) => `${basePath}/${abs.slice(SITE_URL.length)}`;
+
+/**
+ * パンくず: 構造化データ（名前・URL・順序の全項目）と、画面のパンくず（文字とリンク先）が
+ * 期待どおりか。末尾だけ見る検査だと、途中の段が落ちても通る。
+ * @param {string} label
+ * @param {string} s 書き出した HTML
+ * @param {[string, string][]} want [名前, 絶対URL] を上位から順に
+ */
+function checkCrumbs(label, s, want) {
+  const blocks = [...s.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)].map((m) => JSON.parse(m[1]));
+  const ld = blocks.find((b) => b["@type"] === "BreadcrumbList");
+  const got = (ld?.itemListElement ?? []).map((i) => [i.position, i.name, i.item]);
+  const exp = want.map(([n, u], i) => [i + 1, n, u]);
+  if (JSON.stringify(got) !== JSON.stringify(exp)) {
+    fail(`${label}: 構造化データのパンくずが ${JSON.stringify(got)}（期待 ${JSON.stringify(exp)}）`);
+  }
+  const nav = s.match(/<nav class="crumbs[^"]*" aria-label="パンくず">([\s\S]*?)<\/nav>/)?.[1] ?? "";
+  const items = [...nav.matchAll(/<li(?: aria-current="page")?>([\s\S]*?)<\/li>/g)].map((m) => m[1]);
+  const screen = items.map((h) => {
+    const a = h.match(/^<a href="([^"]*)">([\s\S]*?)<\/a>$/);
+    return a ? [textOf(a[2]), a[1]] : [textOf(h), null];
+  });
+  const screenExp = want.map(([n, u], i) => [n, i < want.length - 1 ? toHref(u) : null]);
+  if (JSON.stringify(screen) !== JSON.stringify(screenExp)) {
+    fail(`${label}: 画面のパンくずが ${JSON.stringify(screen)}（期待 ${JSON.stringify(screenExp)}）`);
+  }
+}
+
+for (const p of pages) p.descMax = DESCRIPTION_MAX;
 
 for (const p of pages) {
   const s = html(p.dir);
@@ -267,31 +300,92 @@ if (!existsSync(notFound)) {
 
 // 科の索引（/yasai/ka/）: URL を1階層削った人の行き止まりをなくす入口。索引が全科ページへ
 // 張り、各科ページと野菜索引が索引へ戻る。片方向でも欠けると行き止まりが戻る。
-// 並びと年数は familyPage() を経由せず CROPS から数え直した値と突き合わせる。
+// 期待値は lib を経由せず、定数と CROPS・FAMILIES から数え直す。
 {
   const idx = html(join("yasai", "ka")) ?? "";
-  const data = familyIndex();
-  const linked = [...idx.matchAll(/href="([^"]*\/yasai\/ka\/[^"]+)"/g)].map((m) => m[1]);
-  const want = familySlugs().map((k) => `${basePath}${familyPath(k)}`);
-  if (JSON.stringify(linked) !== JSON.stringify(want)) {
-    fail(`科索引: 科ページへのリンクが ${JSON.stringify(linked)}（期待 ${JSON.stringify(want)}）`);
+  const fams = FAMILIES.filter((f) => CROPS.filter((c) => c.familyKey === f.key).length >= 2);
+  const famKeys = fams.map((f) => f.key);
+
+  // <h1> の中身（タイトル・パンくず・フッターにも同じ文字列が出るので、h1 に限定する）
+  const h1s = [...idx.matchAll(/<h1[^>]*>([\s\S]*?)<\/h1>/g)].map((m) => textOf(m[1]));
+  if (JSON.stringify(h1s) !== JSON.stringify([FAMILY_INDEX_LABEL])) {
+    fail(`科索引: h1 が ${JSON.stringify(h1s)}（期待 ["${FAMILY_INDEX_LABEL}"]）`);
   }
-  if (!idx.includes(textOf(data.heading))) fail("科索引: 見出しが無い");
-  for (const key of familySlugs()) {
-    const sec = sectionOf(idx, `fam-${key}`);
-    const members = CROPS.filter((c) => c.familyKey === key);
-    if (sec === null) {
+
+  // title / description（meta・og・twitter）の期待値を定数と FAMILIES から組む
+  const wantDesc = `${fams.map((f) => shortFamilyName(f.nameJa)).join("・")}の${fams.length}科について、植えるまでにあけたい年数と、あとに植えやすい野菜を科ごとにまとめた一覧です。`;
+  const meta = (attr, name) => {
+    const v = idx.match(new RegExp(`<meta ${attr}="${name}" content="([^"]*)"`))?.[1];
+    return v === undefined ? undefined : decodeEntities(v);
+  };
+  const title = textOf(idx.match(/<title>([\s\S]*?)<\/title>/)?.[1] ?? "");
+  if (title !== FAMILY_INDEX_TITLE) fail(`科索引: title が「${title}」（期待「${FAMILY_INDEX_TITLE}」）`);
+  for (const [attr, name, want, what] of [
+    ["name", "description", wantDesc, "meta description"],
+    ["property", "og:description", wantDesc, "og:description"],
+    ["name", "twitter:description", wantDesc, "twitter:description"],
+    ["property", "og:title", FAMILY_INDEX_TITLE, "og:title"],
+    ["name", "twitter:title", FAMILY_INDEX_TITLE, "twitter:title"],
+  ]) {
+    const got = meta(attr, name);
+    if (got !== want) fail(`科索引: ${what} が「${got}」（期待「${want}」）`);
+  }
+
+  checkCrumbs("科索引", idx, [
+    ["畑めぐり", SITE_URL],
+    [INDEX_LABEL, `${SITE_URL}yasai/`],
+    [FAMILY_INDEX_LABEL, familyIndexHref],
+  ]);
+
+  // 科ページへのリンクは本文（科の節）の中だけを見る。ヘッダー・フッターの導線が増えても落ちない。
+  const body = idx.slice(idx.indexOf('aria-labelledby="families-h"'), idx.indexOf('class="reference-faq'));
+  const linked = [...body.matchAll(/href="([^"]*\/yasai\/ka\/[^"]+)"/g)].map((m) => m[1]);
+  const wantLinks = famKeys.map((k) => `${basePath}/yasai/ka/${k}/`);
+  if (JSON.stringify(linked) !== JSON.stringify(wantLinks)) {
+    fail(`科索引: 科ページへのリンクが ${JSON.stringify(linked)}（期待 ${JSON.stringify(wantLinks)}）`);
+  }
+
+  for (const f of fams) {
+    const key = f.key;
+    const sec = idx.slice(idx.indexOf(`aria-labelledby="fam-${key}"`));
+    const secEnd = sec.indexOf("</section>");
+    const one = secEnd < 0 ? sec : sec.slice(0, secEnd);
+    if (!idx.includes(`aria-labelledby="fam-${key}"`)) {
       fail(`科索引: ${key} の節が無い`);
       continue;
     }
-    const got = chipsOf(sec).map((x) => x.join("|")).sort();
+    const h3 = textOf(one.match(/<h3 id="fam-[^"]*">([\s\S]*?)<\/h3>/)?.[1] ?? "");
+    if (h3 !== f.nameJa) fail(`科索引: ${key} の見出しが「${h3}」（期待「${f.nameJa}」）`);
+
+    const members = CROPS.filter((c) => c.familyKey === key);
+    const years = members.map((c) => c.rotationYears);
+    const min = Math.min(...years);
+    const max = Math.max(...years);
+    const rangeLabel = max === 0 ? "続けて植えやすい" : min === max ? `${max}年` : min === 0 ? `最長${max}年` : `${min}〜${max}年`;
+    const wantYears = max === 0 ? "続けて植えやすい科" : `あけたい年数 ${rangeLabel}`;
+    const cell = one.match(/<span class="ref-years ([^"]*)">([\s\S]*?)<\/span>/);
+    if (!cell || textOf(cell[2]) !== wantYears) {
+      fail(`科索引: ${key} の年数の欄が「${cell ? textOf(cell[2]) : "（無し）"}」（期待「${wantYears}」）`);
+    }
+    if (!cell || cell[1] !== `is-${rotationTier(max)}`) {
+      fail(`科索引: ${key} の年数の段階が「${cell?.[1]}」（期待「is-${rotationTier(max)}」）`);
+    }
+
+    const got = chipsOf(one).map((x) => x.join("|")).sort();
     const exp = members.map((c) => `${c.nameJa}|${rotationYearsLabel(c.rotationYears)}`).sort();
     if (JSON.stringify(got) !== JSON.stringify(exp)) fail(`科索引: ${key} の野菜一覧が作物マスタと違う`);
-    if (!(html(join("yasai", "ka", key)) ?? "").includes(`href="${basePath}${familyIndexPath()}"`)) {
-      fail(`科 ${key}: 科索引へ戻るリンクが無い`);
-    }
+
+    // 科ページからも索引へ戻れる
+    const fp = html(join("yasai", "ka", key)) ?? "";
+    if (!fp.includes(`href="${basePath}/yasai/ka/"`)) fail(`科 ${key}: 科索引へ戻るリンクが無い`);
+    checkCrumbs(`科 ${key}`, fp, [
+      ["畑めぐり", SITE_URL],
+      [INDEX_LABEL, `${SITE_URL}yasai/`],
+      [FAMILY_INDEX_LABEL, familyIndexHref],
+      [f.nameJa, familyHref(key)],
+    ]);
   }
-  if (!(html("yasai") ?? "").includes(`href="${basePath}${familyIndexPath()}"`)) {
+  if (!(html("yasai") ?? "").includes(`href="${basePath}/yasai/ka/"`)) {
     fail("野菜索引: 科索引へのリンクが無い");
   }
 }

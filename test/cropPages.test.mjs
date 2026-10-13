@@ -9,6 +9,7 @@ import { CROPS, FAMILIES } from "../app/lib/crops.mjs";
 import { rotationTier, rotationYearsLabel } from "../app/lib/reference.mjs";
 import {
   CROP_SECTION,
+  DESCRIPTION_MAX,
   cropSlugs,
   findCrop,
   cropPage,
@@ -353,5 +354,13 @@ test("名前から探す一覧は全作物を読み順で並べる", () => {
   for (const c of byName) {
     assert.ok(known.has(c.slug), `存在しない行き先 ${c.slug}`);
     assert.ok(!c.familyJa.includes("（"), `${c.name}: 科名に括弧が残っている`);
+  }
+});
+
+test("description は全作物で検索結果で切れない長さに収まる", () => {
+  for (const p of pages) {
+    const n = [...p.description].length;
+    assert.ok(n <= DESCRIPTION_MAX, `${p.name}: description が ${n} 字（上限 ${DESCRIPTION_MAX}）`);
+    assert.ok(n >= 40, `${p.name}: description が短すぎる（${n} 字）`);
   }
 });

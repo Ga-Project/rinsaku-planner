@@ -9,7 +9,8 @@
     "lint": "next lint --max-warnings 0",
     "typecheck": "tsc --noEmit",
     "test": "node --test",
-    "verify:export": "node scripts/verify-export.mjs out"
+    "verify:export": "node scripts/verify-export.mjs out",
+    "verify:export:negative": "node scripts/verify-export-negative.mjs out"
   },
   "dependencies": {
     "next": "^14.2.0",

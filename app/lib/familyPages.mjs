@@ -25,16 +25,17 @@ import { rotationTier, rotationYearsLabel, SITE_NAME } from "./reference.mjs";
 import { SITE_URL } from "./site.mjs";
 import {
   CROP_SECTION,
+  CROP_INDEX_LABEL,
+  DESCRIPTION_MAX,
   cropIndexUrl,
   followUpsForFamily,
   shortFamilyName,
 } from "./cropPages.mjs";
 
+export { DESCRIPTION_MAX };
+
 /** 科ページのURLの根（/yasai/ の下）。ルーティングと sitemap の唯一の出典。 */
 export const FAMILY_SECTION = "ka";
-
-/** description の上限（検索結果で切れない目安）。test が全科でこの値以下を守らせる。 */
-export const DESCRIPTION_MAX = 120;
 
 /** 科の索引のパンくず上の名前（画面と構造化データで同じ文字を使う）。 */
 export const FAMILY_INDEX_LABEL = "科別 連作ガイド";
@@ -259,12 +260,13 @@ export function familyIndex() {
     title,
     heading: FAMILY_INDEX_LABEL,
     count: families.length,
-    lead: `連作障害は野菜の名前ではなく「科」の単位で起きます。科ごとに、植えるまでにあけたい年数と所属する野菜、あとに植えやすい野菜を読めます。全${families.length}科。`,
+    lead: `連作障害は野菜の名前ではなく「科」の単位で起きます。科ごとのページで、所属する野菜それぞれのあけたい年数、年数の決まり方、あとに植えやすい野菜、よくある質問を読めます。全${families.length}科。`,
     description: `${names.join("・")}の${families.length}科について、植えるまでにあけたい年数と、あとに植えやすい野菜を科ごとにまとめた一覧です。`,
     url: familyIndexUrl(),
     families: families.map((f) => ({
       key: f.key,
       name: f.name,
+      nameInline: f.nameInline,
       count: f.count,
       tier: f.tier,
       yearsLabel: f.yearsLabel,
@@ -283,7 +285,7 @@ export function familyIndexBreadcrumbJsonLd(index) {
       {
         "@type": "ListItem",
         position: 2,
-        name: "野菜別 連作ガイド",
+        name: CROP_INDEX_LABEL,
         item: cropIndexUrl(),
       },
       { "@type": "ListItem", position: 3, name: index.heading, item: index.url },
@@ -325,7 +327,7 @@ export function familyBreadcrumbJsonLd(page) {
       {
         "@type": "ListItem",
         position: 2,
-        name: "野菜別 連作ガイド",
+        name: CROP_INDEX_LABEL,
         item: cropIndexUrl(),
       },
       {

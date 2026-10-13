@@ -37,6 +37,12 @@ import { SITE_URL } from "./site.mjs";
 /** 野菜ページのURLの根（末尾スラッシュなし）。ルーティングと sitemap の唯一の出典。 */
 export const CROP_SECTION = "yasai";
 
+/** meta description の上限（検索結果で切れない目安）。全ページに適用し、test と verify-export が守らせる。 */
+export const DESCRIPTION_MAX = 120;
+
+/** 索引のパンくず・見出しに使う「野菜別 連作ガイド」の名前（画面と構造化データで同じ文字にする）。 */
+export const CROP_INDEX_LABEL = "野菜別 連作ガイド";
+
 /** 「あとに植えやすい野菜」に出す最大件数（多いと選べない）。 */
 const FOLLOW_UP_LIMIT = 8;
 
@@ -219,10 +225,11 @@ export function cropPage(slug) {
       ? `${crop.nameJa}（${famInline}）は、同じ場所で${famInline}を作った直後でも植えやすい野菜です。`
       : `${crop.nameJa}（${famInline}）を植えるには、その場所で${famInline}を最後に作ってから${crop.rotationYears}年あいているのが目安です。`;
 
+  // 検索結果で切れない長さ（DESCRIPTION_MAX）に収める。リード文は作物名・科名・年数だけで
+  // 組まれ、続く説明は固定文なので、最長の作物名でも上限を超えない（test が全件で守らせる）。
   const description =
     `${rotationLine}` +
-    `連作になる同じ科の野菜とそれぞれに要るあき年数、あとに植えやすい野菜、` +
-    `相性のよい組み合わせ、種まきと収穫の時期をまとめました。登録不要で区画の作付け計画もそのまま作れます。`;
+    `同じ科の野菜の年数、あとに植えやすい野菜、相性、種まきと収穫の時期をまとめました。登録不要で計画も作れます。`;
 
   const faq = [
     {
@@ -386,7 +393,7 @@ export function cropBreadcrumbJsonLd(page) {
       {
         "@type": "ListItem",
         position: 2,
-        name: "野菜別 連作ガイド",
+        name: CROP_INDEX_LABEL,
         item: cropIndexUrl(),
       },
       { "@type": "ListItem", position: 3, name: page.name, item: page.url },
