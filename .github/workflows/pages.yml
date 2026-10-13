@@ -29,6 +29,7 @@ jobs:
   # ---------------------------------------------------------------------------
   secret-scan:
     name: Secret scan
+    timeout-minutes: 5
     runs-on: ubuntu-latest
     env:
       GITLEAKS_VERSION: 8.30.1
@@ -52,6 +53,7 @@ jobs:
   # ---------------------------------------------------------------------------
   checks:
     name: Typecheck / Lint / Test
+    timeout-minutes: 10
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -67,6 +69,7 @@ jobs:
 
   build:
     name: Build (static export)
+    timeout-minutes: 15
     needs: [secret-scan, checks] # 双方の通過が前提。fail 時は skip され公開されない。
     runs-on: ubuntu-latest
     steps:
@@ -99,6 +102,7 @@ jobs:
 
   deploy:
     name: Deploy
+    timeout-minutes: 10
     needs: build
     # 公開は main への push のときだけ（PR では build の検査までで止まる）。
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'

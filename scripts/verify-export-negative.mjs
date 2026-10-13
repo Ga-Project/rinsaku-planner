@@ -11,17 +11,22 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { CROPS } from "../app/lib/crops.mjs";
 
 const outDir = process.argv[2] ?? "out";
 const basePath = (process.argv[3] ?? process.env.BASE_PATH ?? "").replace(/\/+$/, "");
 const verify = fileURLToPath(new URL("./verify-export.mjs", import.meta.url));
 
 function run(dir) {
-  const r = spawnSync("node", [verify, dir, basePath], {
+  // 実行中の node をそのまま使い（PATH 上の別バージョンを拾わない）、ハングしても CI を
+  // 占有しないよう時間を区切る。タイムアウト・出力過多は status が null になり、失敗として扱う。
+  const r = spawnSync(process.execPath, [verify, dir, basePath], {
     env: { ...process.env, BASE_PATH: basePath },
     encoding: "utf8",
+    timeout: 60_000,
+    maxBuffer: 16 * 1024 * 1024,
   });
-  return { code: r.status, text: `${r.stdout}${r.stderr}` };
+  return { code: r.status ?? 1, text: `${r.stdout ?? ""}${r.stderr ?? ""}${r.error ? String(r.error) : ""}` };
 }
 
 /** 一時コピーの file 内で from を to に置き換える。置換が起きなければ負例自体が無効なので落とす。 */
@@ -33,15 +38,22 @@ const replace = (file, from, to) => (dir) => {
   writeFileSync(path, after);
 };
 
+// 負例が作物マスタの値に縛られないよう、壊す対象の値は CROPS から導出する。
+const solYears = CROPS.filter((c) => c.familyKey === "solanaceae").map((c) => c.rotationYears);
+const solRange = `${Math.min(...solYears)}〜${Math.max(...solYears)}年`;
+const solWrong = `${Math.max(...solYears)}年`;
+const tomato = CROPS.find((c) => c.id === "tomato");
+const tomatoLabel = `${tomato.rotationYears}年`;
+
 const FAM = "yasai/ka/index.html";
 const SOL = "yasai/ka/solanaceae/index.html";
 
 const cases = [
   ["索引の h1 を別の文言に", replace(FAM, /<h1([^>]*)>科別 連作ガイド<\/h1>/, "<h1$1>連作ガイド</h1>"), "科索引: h1"],
   ["索引の h1 を h2 に降格", replace(FAM, /<h1([^>]*)>(科別 連作ガイド)<\/h1>/, "<h2$1>$2</h2>"), "科索引: h1"],
-  ["索引のナス科の年数を1つの値に言い切る", replace(FAM, "あけたい年数 3〜4年", "あけたい年数 4年"), "科索引: solanaceae の年数の欄"],
+  ["索引のナス科の年数を1つの値に言い切る", replace(FAM, `あけたい年数 ${solRange}`, `あけたい年数 ${solWrong}`), "科索引: solanaceae の年数の欄"],
   ["索引の年数の段階の class を変える", replace(FAM, /ref-years is-heavy/, "ref-years is-none"), "年数の段階"],
-  ["索引の野菜チップの年数を変える", replace(FAM, /(<span class="crop-chip-name">トマト<\/span><span class="crop-chip-sub">)4年/, "$13年"), "野菜一覧が作物マスタと違う"],
+  ["索引の野菜チップの年数を変える", replace(FAM, `<span class="crop-chip-name">${tomato.nameJa}</span><span class="crop-chip-sub">${tomatoLabel}</span>`, `<span class="crop-chip-name">${tomato.nameJa}</span><span class="crop-chip-sub">${tomato.rotationYears + 1}年</span>`), "野菜一覧が作物マスタと違う"],
   ["索引の科見出しを変える", replace(FAM, /(<\/span>)ナス科(<\/span><\/h3>)/, "$1ウリ科$2"), "見出しが"],
   ["索引の BreadcrumbList を消す", replace(FAM, /<script type="application\/ld\+json">\{"@context":"https:\/\/schema.org","@type":"BreadcrumbList".*?<\/script>/, ""), "科索引: 構造化データのパンくず"],
   ["索引の画面のパンくずから野菜別を落とす", replace(FAM, /<li><a href="[^"]*\/yasai\/">野菜別 連作ガイド<\/a><\/li>/, ""), "科索引: 画面のパンくず"],
@@ -66,6 +78,19 @@ const cases = [
     writeFileSync(path, s);
   }, "野菜 tomato: meta description が"],
   ["野菜索引から科索引へのリンクを落とす", replace("yasai/index.html", /<a href="[^"]*\/yasai\/ka\/">[^<]*<\/a>/, "<span>x</span>"), "野菜索引: 科索引へのリンクが無い"],
+  ["野菜ページの構造化パンくずから野菜別の段を落とす", replace("yasai/tomato/index.html", /\{"@type":"ListItem","position":2,"name":"野菜別 連作ガイド","item":"[^"]*"\},/, ""), "野菜 tomato: 構造化データのパンくず"],
+  ["野菜ページの画面のパンくずから野菜別の段を落とす", replace("yasai/tomato/index.html", /<li><a href="[^"]*\/yasai\/">野菜別 連作ガイド<\/a><\/li>/, ""), "野菜 tomato: 画面のパンくず"],
+  ["野菜索引の画面のパンくずから畑めぐりを落とす", replace("yasai/index.html", /<li><a href="[^"]*\/">畑めぐり<\/a><\/li>/, ""), "野菜索引: 画面のパンくず"],
+  ["野菜索引の h1 を消す", replace("yasai/index.html", /<h1([^>]*)>野菜別 連作ガイド<\/h1>/, "<p$1>野菜別 連作ガイド</p>"), "野菜索引: h1"],
+  ["野菜ページの h1 を消す", replace("yasai/tomato/index.html", /<h1/, "<div"), "野菜 tomato: h1 が"],
+  ["野菜索引のナス科の年数を1つの値に言い切る", replace("yasai/index.html", `あけたい年数 ${solRange}`, `あけたい年数 ${solWrong}`), "野菜索引: solanaceae の年数の欄"],
+  ["科ページに BreadcrumbList を重複させる", (dir) => {
+    const path = join(dir, SOL);
+    const s = readFileSync(path, "utf8");
+    const m = s.match(/<script type="application\/ld\+json">\{"@context":"https:\/\/schema.org","@type":"BreadcrumbList".*?<\/script>/);
+    if (!m) throw new Error("負例が当たらない: BreadcrumbList が無い");
+    writeFileSync(path, s.replace(m[0], m[0] + m[0]));
+  }, "BreadcrumbList が 2 個"],
   ["sitemap から科索引を落とす", replace("sitemap.xml", /<url>\s*<loc>[^<]*\/yasai\/ka\/<\/loc>[\s\S]*?<\/url>\s*/, ""), "sitemap に載っていない"],
 ];
 

@@ -118,9 +118,12 @@ export default function FamilyIndexPage() {
                 </p>
               </section>
             ))}
-            <p className="crop-back">
-              <Link href="/yasai/">← 野菜別 連作ガイドの一覧へ</Link>
-            </p>
+            {/* 科ごとの導線（上の「くわしく →」）とは別の、ページ全体の戻り導線。 */}
+            <div className="crop-back-group">
+              <p className="crop-back">
+                <Link href="/yasai/">← 野菜別 連作ガイドの一覧へ</Link>
+              </p>
+            </div>
           </div>
         </section>
 
