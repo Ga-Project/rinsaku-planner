@@ -364,3 +364,8 @@ test("description は全作物で検索結果で切れない長さに収まる",
     assert.ok(n >= 40, `${p.name}: description が短すぎる（${n} 字）`);
   }
 });
+
+test("description の上限は scripts/verify-export.mjs の検査側の値（120）と一致する", () => {
+  // verify-export は lib の値を読まず 120 を書き下している。lib だけ緩めると検査と食い違うので、ここで固定する。
+  assert.equal(DESCRIPTION_MAX, 120);
+});

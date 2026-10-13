@@ -26,7 +26,12 @@ function run(dir) {
     timeout: 60_000,
     maxBuffer: 16 * 1024 * 1024,
   });
-  return { code: r.status ?? 1, text: `${r.stdout ?? ""}${r.stderr ?? ""}${r.error ? String(r.error) : ""}` };
+  const timedOut = r.error?.code === "ETIMEDOUT";
+  return {
+    code: r.status ?? 1,
+    timedOut,
+    text: `${r.stdout ?? ""}${r.stderr ?? ""}${timedOut ? "verify-export が60秒で終わらなかった（ハング）" : r.error ? String(r.error) : ""}`,
+  };
 }
 
 /** 一時コピーの file 内で from を to に置き換える。置換が起きなければ負例自体が無効なので落とす。 */
@@ -82,6 +87,12 @@ const cases = [
   ["野菜ページの画面のパンくずから野菜別の段を落とす", replace("yasai/tomato/index.html", /<li><a href="[^"]*\/yasai\/">野菜別 連作ガイド<\/a><\/li>/, ""), "野菜 tomato: 画面のパンくず"],
   ["野菜索引の画面のパンくずから畑めぐりを落とす", replace("yasai/index.html", /<li><a href="[^"]*\/">畑めぐり<\/a><\/li>/, ""), "野菜索引: 画面のパンくず"],
   ["野菜索引の h1 を消す", replace("yasai/index.html", /<h1([^>]*)>野菜別 連作ガイド<\/h1>/, "<p$1>野菜別 連作ガイド</p>"), "野菜索引: h1"],
+  ["kale（ka で始まる野菜 ID）のパンくずから野菜別の段を落とす", replace("yasai/kale/index.html", /\{"@type":"ListItem","position":2,"name":"野菜別 連作ガイド","item":"[^"]*"\},/, ""), "野菜 kale: 構造化データのパンくず"],
+  ["トップの description を120字超に伸ばす", (dir) => {
+    const path = join(dir, "index.html");
+    const s = readFileSync(path, "utf8").replace(/(<meta name="description" content="[^"]*)"/, `$1${"あ".repeat(80)}"`);
+    writeFileSync(path, s);
+  }, "トップ: meta description が"],
   ["野菜ページの h1 を消す", replace("yasai/tomato/index.html", /<h1/, "<div"), "野菜 tomato: h1 が"],
   ["野菜索引のナス科の年数を1つの値に言い切る", replace("yasai/index.html", `あけたい年数 ${solRange}`, `あけたい年数 ${solWrong}`), "野菜索引: solanaceae の年数の欄"],
   ["科ページに BreadcrumbList を重複させる", (dir) => {
@@ -115,7 +126,10 @@ try {
       continue;
     }
     const r = run(dir);
-    if (r.code === 0) {
+    if (r.timedOut) {
+      console.error(`NG  ${name}: ${r.text}`);
+      bad++;
+    } else if (r.code === 0) {
       console.error(`NG  ${name}: 壊したのに verify-export が通った`);
       bad++;
     } else if (!r.text.includes(expect)) {

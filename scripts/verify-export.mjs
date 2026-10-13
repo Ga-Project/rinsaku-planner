@@ -101,16 +101,19 @@ function html(relDir) {
 }
 
 const pages = [
-  { dir: ".", url: SITE_URL, label: "トップ" },
-  { dir: "yasai", url: cropIndexUrl(), label: "野菜索引" },
-  { dir: join("yasai", "ka"), url: `${SITE_URL}yasai/ka/`, label: "科索引" },
+  { kind: "top", dir: ".", url: SITE_URL, label: "トップ" },
+  { kind: "cropIndex", dir: "yasai", url: cropIndexUrl(), label: "野菜索引" },
+  { kind: "familyIndex", dir: join("yasai", "ka"), url: `${SITE_URL}yasai/ka/`, label: "科索引" },
   ...familySlugs().map((key) => ({
+    kind: "family",
     dir: join("yasai", "ka", key),
     url: familyUrl(key),
     label: `科 ${key}`,
     data: familyPage(key),
   })),
   ...cropSlugs().map((slug) => ({
+    kind: "crop",
+    slug,
     dir: join("yasai", slug),
     url: cropUrl(slug),
     label: `野菜 ${slug}`,
@@ -127,14 +130,8 @@ const familyIndexHref = `${SITE_URL}yasai/ka/`;
 const familyHref = (key) => `${SITE_URL}yasai/ka/${key}/`;
 const toHref = (abs) => `${basePath}/${abs.slice(SITE_URL.length)}`;
 
-/**
- * パンくず: 構造化データ（名前・URL・順序の全項目）と、画面のパンくず（文字とリンク先）が
- * 期待どおりか。末尾だけ見る検査だと、途中の段が落ちても通る。
- * @param {string} label
- * @param {string} s 書き出した HTML
- * @param {[string, string][]} want [名前, 絶対URL] を上位から順に
- */
-function checkCrumbs(label, s, want) {
+/** 書き出した HTML の ld+json を全て読む。JSON として読めないものは失敗に集計する（例外で落とさない）。 */
+function parseJsonLd(label, s) {
   const blocks = [];
   for (const m of s.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)) {
     try {
@@ -143,6 +140,18 @@ function checkCrumbs(label, s, want) {
       fail(`${label}: 構造化データが JSON として読めない（${e.message}）`);
     }
   }
+  return blocks;
+}
+
+/**
+ * パンくず: 構造化データ（名前・URL・順序の全項目）と、画面のパンくず（文字とリンク先）が
+ * 期待どおりか。末尾だけ見る検査だと、途中の段が落ちても通る。
+ * @param {string} label
+ * @param {string} s 書き出した HTML
+ * @param {[string, string][]} want [名前, 絶対URL] を上位から順に
+ */
+function checkCrumbs(label, s, want) {
+  const blocks = parseJsonLd(label, s);
   const lds = blocks.filter((b) => b["@type"] === "BreadcrumbList");
   if (lds.length !== 1) fail(`${label}: BreadcrumbList が ${lds.length} 個（期待 1 個）`);
   const ld = lds[0];
@@ -164,17 +173,24 @@ function checkCrumbs(label, s, want) {
 }
 
 // meta description の上限。lib の DESCRIPTION_MAX を読まず、ここに書き下す（lib の値を緩めても
-// 検査が一緒に緩まない。両者のずれは lib の test が固定している）。全ページに適用する。
+// 検査が一緒に緩まない）。lib 側の値がこの値と一致していることは test が固定している。全ページに適用する。
 const DESC_MAX = 120;
 
 // パンくずの期待値（トップ以外の読み物ページ）。科の索引・科ページは下の専用ブロックで見る。
+// パスの前方一致でページ種別を推測しない（"ka" で始まる野菜 ID＝kale が科ページ側に吸われて
+// 検査が外れた）。種別は上の pages 配列が持つ。
 for (const p of pages) {
-  if (p.dir === "yasai") {
+  if (p.kind === "cropIndex") {
     p.crumbs = [["畑めぐり", SITE_URL], [INDEX_LABEL, `${SITE_URL}yasai/`]];
-  } else if (p.dir.startsWith(`yasai${sep}`) && !p.dir.startsWith(`yasai${sep}ka`)) {
-    const id = p.dir.slice(`yasai${sep}`.length);
-    const crop = CROPS.find((c) => c.id === id);
-    p.crumbs = [["畑めぐり", SITE_URL], [INDEX_LABEL, `${SITE_URL}yasai/`], [crop?.nameJa ?? id, `${SITE_URL}yasai/${id}/`]];
+  } else if (p.kind === "crop") {
+    const crop = CROPS.find((c) => c.id === p.slug);
+    p.crumbs = [["畑めぐり", SITE_URL], [INDEX_LABEL, `${SITE_URL}yasai/`], [crop?.nameJa ?? p.slug, `${SITE_URL}yasai/${p.slug}/`]];
+  }
+}
+// 全野菜（作物マスタの全件）にパンくずの期待値が付いていること。付かない野菜があれば検査が外れている。
+for (const c of CROPS) {
+  if (!pages.some((p) => p.kind === "crop" && p.slug === c.id && p.crumbs)) {
+    fail(`野菜 ${c.id}: パンくずの検査が掛かっていない（pages に無い・期待値が付いていない）`);
   }
 }
 
@@ -228,9 +244,7 @@ for (const p of pages) {
   // 構造化データ: 画面と同じ事実だけを持つか。ページ側で JSON-LD だけを書き換えても
   // lib のテストは反応しないので、書き出した HTML の ld+json を読んで突き合わせる。
   if (p.data) {
-    const blocks = [...s.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)].map(
-      (m) => JSON.parse(m[1]),
-    );
+    const blocks = parseJsonLd(p.label, s);
     const byType = (t) => blocks.find((b) => b["@type"] === t);
     const article = byType("Article");
     const crumbs = byType("BreadcrumbList");
@@ -378,7 +392,7 @@ if (!existsSync(notFound)) {
 
   for (const f of fams) {
     const key = f.key;
-    const at = idx.indexOf(`aria-labelledby="fam-${key}"`);
+    const at = bodyStart < 0 ? -1 : idx.indexOf(`aria-labelledby="fam-${key}"`, bodyStart);
     if (at < 0) {
       fail(`科索引: ${key} の節が無い`);
       continue;
